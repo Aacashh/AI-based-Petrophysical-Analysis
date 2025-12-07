@@ -1,0 +1,5 @@
+streamlit
+lasio
+pandas
+numpy
+matplotlib
