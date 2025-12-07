@@ -1,0 +1,236 @@
+/* App Layout - WellCAD Style 3-Panel */
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  flex: 1;
+  margin-top: var(--total-header-height);
+  height: calc(100vh - var(--total-header-height));
+  overflow: hidden;
+}
+
+/* Three Panel Layout */
+.explorer-panel {
+  width: var(--sidebar-width);
+  min-width: 150px;
+  max-width: 350px;
+  background: var(--color-surface-light);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--color-background);
+}
+
+.properties-panel {
+  width: var(--properties-width);
+  min-width: 180px;
+  max-width: 400px;
+  background: var(--color-surface-light);
+  border-left: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* Document tabs area */
+.document-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.document-tabs {
+  display: flex;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--spacing-1) var(--spacing-2) 0;
+  min-height: 26px;
+}
+
+.document-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-1) var(--spacing-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  position: relative;
+  top: 1px;
+  margin-right: -1px;
+}
+
+.document-tab.active {
+  background: var(--color-surface-light);
+  border-bottom: 1px solid var(--color-surface-light);
+}
+
+.document-tab-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.document-tab-close {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.5;
+  font-size: 10px;
+  padding: 0;
+  margin-left: var(--spacing-2);
+}
+
+.document-tab-close:hover {
+  opacity: 1;
+  background: #E81123;
+  color: white;
+}
+
+/* View area with ruler */
+.view-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-surface-light);
+}
+
+.horizontal-ruler {
+  height: var(--ruler-height);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: flex-end;
+  padding-left: var(--depth-track-width);
+  position: relative;
+}
+
+.ruler-section {
+  flex: 1;
+  height: 100%;
+  border-left: 1px solid var(--color-border);
+  position: relative;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.ruler-tick {
+  position: absolute;
+  bottom: 0;
+  font-size: 8px;
+  transform: translateX(-50%);
+}
+
+.ruler-tick-mark {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border);
+}
+
+.ruler-tick-major {
+  height: 8px;
+}
+
+.ruler-tick-minor {
+  height: 4px;
+}
+
+/* Log viewport */
+.log-viewport {
+  flex: 1;
+  overflow: auto;
+  background: var(--color-track-bg);
+}
+
+/* Error Banner */
+.error-banner {
+  background: #FFF3CD;
+  border: 1px solid #D4A800;
+  padding: var(--spacing-2) var(--spacing-3);
+  margin: var(--spacing-2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #856404;
+  font-size: var(--font-size-sm);
+}
+
+.error-banner button {
+  background: none;
+  border: none;
+  color: #856404;
+  font-size: 1rem;
+  padding: 0 var(--spacing-2);
+  cursor: pointer;
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Status bar at bottom */
+.status-bar {
+  height: 22px;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.status-bar-section {
+  padding: 0 var(--spacing-3);
+  border-right: 1px solid var(--color-border);
+}
+
+.status-bar-section:last-child {
+  border-right: none;
+}

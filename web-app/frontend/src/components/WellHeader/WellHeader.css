@@ -1,0 +1,39 @@
+/* WellHeader - WellCAD Style */
+.well-header {
+  background: #F2F2F2;
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-2) var(--spacing-3);
+  font-size: var(--font-size-sm);
+}
+
+.well-header-main {
+  margin-bottom: var(--spacing-2);
+}
+
+.well-name {
+  font-weight: 700;
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+}
+
+.well-header-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3);
+}
+
+.header-field {
+  display: flex;
+  gap: var(--spacing-2);
+}
+
+.field-label {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+}
+
+.field-value {
+  color: var(--color-text);
+  font-size: var(--font-size-xs);
+}

@@ -1,0 +1,44 @@
+/* LogViewer - WellCAD Style */
+.log-viewer {
+  background: var(--color-surface-light);
+  min-height: 100%;
+}
+
+.log-viewer.loading,
+.log-viewer.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  gap: var(--spacing-3);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.log-viewer svg {
+  display: block;
+}
+
+/* D3 Chart Styles */
+.log-viewer .track rect {
+  stroke-width: 1;
+}
+
+.log-viewer .grid line {
+  shape-rendering: crispEdges;
+}
+
+/* Loading spinner */
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,195 @@
+/* Explorer Panel - WellCAD Style */
+.explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-surface-light);
+}
+
+.explorer-header {
+  background: linear-gradient(to bottom, #FFFFFF, #E8E8E8);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--spacing-2) var(--spacing-3);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.explorer-header-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary);
+}
+
+.explorer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-2);
+}
+
+/* Tree View */
+.tree-view {
+  font-size: var(--font-size-sm);
+}
+
+.tree-item {
+  user-select: none;
+}
+
+.tree-item-row {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-1) var(--spacing-2);
+  cursor: pointer;
+  gap: var(--spacing-1);
+}
+
+.tree-item-row:hover {
+  background: var(--color-menu-hover);
+}
+
+.tree-item-row.selected {
+  background: #316AC5;
+  color: white;
+}
+
+.tree-expand-btn {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tree-expand-btn:hover {
+  color: var(--color-text);
+}
+
+.tree-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tree-icon.folder { color: #DCB67A; }
+.tree-icon.curve { color: var(--color-primary); }
+.tree-icon.curve-gr { color: var(--color-gr); }
+.tree-icon.curve-res { color: var(--color-res-deep); }
+.tree-icon.curve-dens { color: var(--color-dens); }
+.tree-icon.curve-neut { color: var(--color-neut); }
+
+.tree-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-checkbox {
+  width: 13px;
+  height: 13px;
+  margin-left: auto;
+  accent-color: var(--color-primary);
+}
+
+.tree-children {
+  margin-left: 16px;
+}
+
+/* Sections */
+.explorer-section {
+  margin-bottom: var(--spacing-2);
+}
+
+.explorer-section-header {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-1) var(--spacing-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  gap: var(--spacing-2);
+  font-size: var(--font-size-sm);
+}
+
+.explorer-section-header:hover {
+  background: var(--color-surface-hover);
+}
+
+.explorer-section-content {
+  border: 1px solid var(--color-border);
+  border-top: none;
+  background: var(--color-surface-light);
+}
+
+/* Upload area within explorer */
+.explorer-upload {
+  padding: var(--spacing-3);
+  border-top: 1px solid var(--color-border);
+  margin-top: auto;
+}
+
+.upload-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
+  background: linear-gradient(to bottom, #FFFFFF, #F0F0F0);
+  border: 1px dashed var(--color-border);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.upload-btn:hover {
+  background: var(--color-menu-hover);
+  border-style: solid;
+  border-color: var(--color-primary);
+}
+
+/* File input hidden */
+.hidden-input {
+  display: none;
+}
+
+/* Spinner */
+.spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Loaded file info */
+.file-info-compact {
+  padding: var(--spacing-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  margin-top: var(--spacing-2);
+  font-size: var(--font-size-xs);
+}
+
+.file-info-name {
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-1);
+  word-break: break-all;
+}
+
+.file-info-meta {
+  color: var(--color-text-secondary);
+}

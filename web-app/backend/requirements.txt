@@ -1,0 +1,6 @@
+flask>=2.3.0
+flask-cors>=4.0.0
+lasio>=0.31
+pandas>=2.0.0
+numpy>=1.24.0
+matplotlib>=3.7.0

@@ -1,0 +1,129 @@
+/* Properties Panel - WellCAD Style */
+.properties-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-surface-light);
+}
+
+.properties-header {
+  background: linear-gradient(to bottom, #FFFFFF, #E8E8E8);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--spacing-2) var(--spacing-3);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.properties-header-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--color-primary);
+}
+
+.properties-search {
+  padding: var(--spacing-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.properties-search input {
+  width: 100%;
+  padding: var(--spacing-1) var(--spacing-2);
+  font-size: var(--font-size-xs);
+}
+
+.properties-content {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Property Sections */
+.property-section {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.property-section-header {
+  background: var(--color-surface);
+  padding: var(--spacing-1) var(--spacing-2);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.property-section-header:hover {
+  background: var(--color-surface-hover);
+}
+
+.property-subsection {
+  margin-left: var(--spacing-3);
+}
+
+.property-subsection-header {
+  padding: var(--spacing-1) var(--spacing-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+/* Property Grid */
+.property-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.property-row {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-1) var(--spacing-2);
+  gap: var(--spacing-2);
+  font-size: var(--font-size-xs);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.property-row:hover {
+  background: var(--color-menu-hover);
+}
+
+.property-label {
+  width: 100px;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+}
+
+.property-value {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.property-value.muted {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.property-input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--spacing-1);
+  font-size: var(--font-size-xs);
+}
+
+/* Color picker */
+.color-picker {
+  width: 20px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+/* Checkbox styling */
+.property-row input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+}

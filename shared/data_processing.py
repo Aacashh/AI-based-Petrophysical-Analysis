@@ -1,0 +1,231 @@
+"""
+Data Processing Module
+Handles data transformation, null handling, smoothing, and export.
+"""
+
+import pandas as pd
+import numpy as np
+import lasio
+import io
+
+# Standard null values in LAS files
+NULL_VALUES = [-999.25, -999, -9999, -9999.25, -999.2500, -999.00]
+
+
+def handle_null_values(df, null_values=None):
+    """
+    Replace null values with NaN to create gaps in plots.
+    
+    Args:
+        df: pandas DataFrame
+        null_values: List of null value markers
+        
+    Returns:
+        DataFrame with nulls replaced by NaN
+    """
+    if null_values is None:
+        null_values = NULL_VALUES
+    
+    df_clean = df.copy()
+    for col in df_clean.columns:
+        if pd.api.types.is_numeric_dtype(df_clean[col]):
+            for null_val in null_values:
+                df_clean[col] = df_clean[col].replace(null_val, np.nan)
+    
+    return df_clean
+
+
+def apply_smoothing(df, window=5, columns=None, exclude=['DEPTH']):
+    """
+    Apply moving average smoothing to curves.
+    
+    Args:
+        df: pandas DataFrame
+        window: Smoothing window size
+        columns: List of columns to smooth (None = all numeric)
+        exclude: Columns to exclude from smoothing
+        
+    Returns:
+        DataFrame with smoothed values
+    """
+    if window <= 0:
+        return df
+    
+    df_smooth = df.copy()
+    
+    if columns is None:
+        columns = [col for col in df.columns if col not in exclude 
+                   and pd.api.types.is_numeric_dtype(df[col])]
+    
+    for col in columns:
+        if col in df_smooth.columns:
+            df_smooth[col] = df_smooth[col].rolling(
+                window=window, center=True, min_periods=1
+            ).mean()
+    
+    return df_smooth
+
+
+def process_data(las, mapping, smooth_window=0):
+    """
+    Convert LAS data to clean DataFrame with proper null handling.
+    
+    Args:
+        las: lasio.LASFile object
+        mapping: Curve mapping dictionary
+        smooth_window: Smoothing window (0 = no smoothing)
+        
+    Returns:
+        pandas DataFrame
+    """
+    df = las.df()
+    df = df.reset_index()
+    
+    # Standardize depth column name
+    if mapping['DEPTH'] and mapping['DEPTH'] in df.columns:
+        df.rename(columns={mapping['DEPTH']: 'DEPTH'}, inplace=True)
+    elif df.columns[0].upper() in ['DEPT', 'DEPTH']:
+        df.rename(columns={df.columns[0]: 'DEPTH'}, inplace=True)
+    
+    # Handle null values
+    df = handle_null_values(df)
+    
+    # Apply smoothing if requested
+    if smooth_window > 0:
+        df = apply_smoothing(df, window=smooth_window)
+    
+    return df
+
+
+def get_auto_scale(df, column, default_min, default_max, margin=0.1):
+    """
+    Calculate auto-scaling when data exceeds standard ranges.
+    
+    Args:
+        df: pandas DataFrame
+        column: Column name to scale
+        default_min: Default minimum value
+        default_max: Default maximum value
+        margin: Margin as fraction of range
+        
+    Returns:
+        Tuple (min, max)
+    """
+    if column not in df.columns:
+        return default_min, default_max
+    
+    data = df[column].dropna()
+    if len(data) == 0:
+        return default_min, default_max
+    
+    data_min = data.min()
+    data_max = data.max()
+    
+    # Check if data is within default range
+    if data_min >= default_min and data_max <= default_max:
+        return default_min, default_max
+    
+    # Expand range with margin
+    range_val = data_max - data_min
+    if range_val == 0:
+        range_val = 0.1
+    
+    return data_min - range_val * margin, data_max + range_val * margin
+
+
+def get_depth_range(df, depth_col='DEPTH'):
+    """
+    Get the depth range of the data.
+    
+    Args:
+        df: pandas DataFrame
+        depth_col: Depth column name
+        
+    Returns:
+        Tuple (min_depth, max_depth)
+    """
+    if depth_col not in df.columns:
+        return 0, 0
+    
+    return float(df[depth_col].min()), float(df[depth_col].max())
+
+
+def filter_by_depth(df, start_depth, end_depth, depth_col='DEPTH'):
+    """
+    Filter DataFrame to a depth range.
+    
+    Args:
+        df: pandas DataFrame
+        start_depth: Start depth
+        end_depth: End depth
+        depth_col: Depth column name
+        
+    Returns:
+        Filtered DataFrame
+    """
+    if depth_col not in df.columns:
+        return df
+    
+    return df[(df[depth_col] >= start_depth) & (df[depth_col] <= end_depth)]
+
+
+def export_to_las(df, header_info, depth_unit='m'):
+    """
+    Export DataFrame to LAS file format.
+    
+    Args:
+        df: pandas DataFrame
+        header_info: Dictionary with well metadata
+        depth_unit: Depth unit string
+        
+    Returns:
+        LAS file content as string
+    """
+    las_out = lasio.LASFile()
+    
+    # Set header info
+    las_out.well.WELL = header_info.get('WELL', 'UNKNOWN')
+    las_out.well.STRT = df['DEPTH'].min() if 'DEPTH' in df.columns else 0
+    las_out.well.STOP = df['DEPTH'].max() if 'DEPTH' in df.columns else 0
+    las_out.well.STEP = df['DEPTH'].diff().median() if 'DEPTH' in df.columns and len(df) > 1 else 0
+    las_out.well.NULL = -999.25
+    
+    # Add curves
+    for col in df.columns:
+        if col == 'DEPTH':
+            las_out.append_curve('DEPT', df[col].values, unit=depth_unit, descr='Depth')
+        else:
+            # Replace NaN with null value for export
+            values = df[col].fillna(-999.25).values
+            las_out.append_curve(col, values, unit='', descr=col)
+    
+    # Write to string
+    output = io.StringIO()
+    las_out.write(output)
+    return output.getvalue()
+
+
+def df_to_json(df, depth_col='DEPTH'):
+    """
+    Convert DataFrame to JSON format for API response.
+    
+    Args:
+        df: pandas DataFrame
+        depth_col: Depth column name
+        
+    Returns:
+        Dictionary with curve data
+    """
+    result = {
+        'depth': df[depth_col].tolist() if depth_col in df.columns else [],
+        'curves': {}
+    }
+    
+    for col in df.columns:
+        if col != depth_col:
+            # Convert to list, replacing NaN with None for JSON
+            values = df[col].tolist()
+            values = [None if pd.isna(v) else v for v in values]
+            result['curves'][col] = values
+    
+    return result

@@ -1,0 +1,387 @@
+/* 
+ * WellLog Viewer Pro - Design System
+ * Professional WellCAD-style light theme
+ */
+
+/* CSS Variables - Design Tokens */
+:root {
+  /* Colors - WellCAD Light Theme */
+  --color-primary: #0066CC;
+  --color-primary-dark: #004C99;
+  --color-primary-light: #3388DD;
+  
+  /* Backgrounds - Light Professional */
+  --color-background: #E8E8E8;
+  --color-surface: #F0F0F0;
+  --color-surface-light: #FFFFFF;
+  --color-surface-hover: #E0E0E0;
+  --color-surface-active: #D0D0D0;
+  
+  /* Menu/Toolbar colors */
+  --color-toolbar-bg: #F0F0F0;
+  --color-menubar-bg: #F5F5F5;
+  --color-toolbar-border: #CCCCCC;
+  --color-menu-hover: #DDEEFF;
+  
+  /* Text */
+  --color-text: #1A1A1A;
+  --color-text-secondary: #4A4A4A;
+  --color-text-muted: #6E6E6E;
+  --color-text-light: #8A8A8A;
+  
+  /* Borders */
+  --color-border: #C0C0C0;
+  --color-border-light: #D8D8D8;
+  --color-border-dark: #A0A0A0;
+  
+  /* Track Colors - Industry Standard */
+  --color-track-bg: #FFFFFF;
+  --color-track-header: #F0F0F0;
+  --color-track-grid: #E0E0E0;
+  --color-track-grid-major: #C0C0C0;
+  
+  --color-gr: #00AA00;          /* Gamma Ray - Green */
+  --color-gr-fill: #90EE90;
+  --color-res-deep: #0000FF;    /* Deep Resistivity - Blue */
+  --color-res-med: #CC0000;     /* Medium Resistivity - Red */
+  --color-res-shal: #FF8C00;    /* Shallow Resistivity - Orange */
+  --color-dens: #CC0000;        /* Density - Red */
+  --color-neut: #0000FF;        /* Neutron - Blue */
+  --color-gas-fill: #FFFF00;    /* Gas crossover */
+  --color-shale-fill: #808080;  /* Shale crossover */
+  
+  /* Status Colors */
+  --color-success: #28A745;
+  --color-warning: #FFC107;
+  --color-error: #DC3545;
+  --color-info: #17A2B8;
+  
+  /* Typography */
+  --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --font-family-mono: 'Consolas', 'Courier New', monospace;
+  --font-size-xs: 0.6875rem;
+  --font-size-sm: 0.75rem;
+  --font-size-base: 0.8125rem;
+  --font-size-lg: 0.875rem;
+  --font-size-xl: 1rem;
+  --font-size-2xl: 1.125rem;
+  --font-size-3xl: 1.25rem;
+  
+  /* Spacing */
+  --spacing-1: 0.125rem;
+  --spacing-2: 0.25rem;
+  --spacing-3: 0.5rem;
+  --spacing-4: 0.75rem;
+  --spacing-5: 1rem;
+  --spacing-6: 1.25rem;
+  --spacing-8: 1.5rem;
+  --spacing-10: 2rem;
+  
+  /* Dimensions */
+  --sidebar-width: 200px;
+  --properties-width: 220px;
+  --header-height: 24px;
+  --toolbar-height: 28px;
+  --menubar-height: 22px;
+  --total-header-height: 74px;
+  --track-width: 120px;
+  --track-gap: 0px;
+  --depth-track-width: 50px;
+  --ruler-height: 22px;
+  
+  /* Borders & Shadows */
+  --border-radius-sm: 0px;
+  --border-radius-md: 2px;
+  --border-radius-lg: 4px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.2);
+  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  
+  /* Transitions */
+  --transition-fast: 100ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+}
+
+/* Reset & Base Styles */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--color-background);
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  line-height: 1.4;
+  overflow: hidden;
+}
+
+/* Scrollbar Styling - Windows Classic */
+::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: #F0F0F0;
+  border: 1px solid #CCCCCC;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to right, #F8F8F8, #D8D8D8);
+  border: 1px solid #A0A0A0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to right, #E8E8E8, #C8C8C8);
+}
+
+::-webkit-scrollbar-button {
+  background: #F0F0F0;
+  border: 1px solid #A0A0A0;
+  width: 16px;
+  height: 16px;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+h1 { font-size: var(--font-size-3xl); }
+h2 { font-size: var(--font-size-2xl); }
+h3 { font-size: var(--font-size-xl); }
+h4 { font-size: var(--font-size-lg); }
+
+/* Buttons - Windows Classic Style */
+button {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: normal;
+  cursor: pointer;
+  border: 1px solid var(--color-border-dark);
+  border-radius: 0;
+  padding: var(--spacing-1) var(--spacing-3);
+  background: linear-gradient(to bottom, #FFFFFF, #E0E0E0);
+  color: var(--color-text);
+  transition: all var(--transition-fast);
+}
+
+button:hover {
+  background: linear-gradient(to bottom, #F0F0F0, #D0D0D0);
+}
+
+button:active {
+  background: #D0D0D0;
+  box-shadow: var(--shadow-inset);
+}
+
+.btn-primary {
+  background: linear-gradient(to bottom, #4A90D9, #2B6CB0);
+  color: white;
+  border-color: #1A5490;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(to bottom, #5A9EE5, #3575B8);
+}
+
+.btn-secondary {
+  background: linear-gradient(to bottom, #FFFFFF, #E8E8E8);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover {
+  background: linear-gradient(to bottom, #F5F5F5, #DDDDDD);
+}
+
+/* Form Elements - Windows Classic */
+input, select, textarea {
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  background: #FFFFFF;
+  color: var(--color-text);
+  border: 1px solid var(--color-border-dark);
+  padding: var(--spacing-1) var(--spacing-2);
+  transition: border-color var(--transition-fast);
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+select {
+  background: linear-gradient(to bottom, #FFFFFF, #F0F0F0);
+}
+
+input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  accent-color: var(--color-primary);
+}
+
+/* Cards */
+.card {
+  background: var(--color-surface-light);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-4);
+}
+
+/* Panel Headers - WellCAD Style */
+.panel-header {
+  background: linear-gradient(to bottom, #FFFFFF, #E8E8E8);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--spacing-2) var(--spacing-3);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+/* Tree View Styles */
+.tree-node {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-1) var(--spacing-2);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.tree-node:hover {
+  background: var(--color-menu-hover);
+}
+
+.tree-node.selected {
+  background: #316AC5;
+  color: white;
+}
+
+.tree-expand {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+.tree-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: var(--spacing-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Utility Classes */
+.text-primary { color: var(--color-primary); }
+.text-secondary { color: var(--color-text-secondary); }
+.text-muted { color: var(--color-text-muted); }
+
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.justify-center { justify-content: center; }
+.gap-1 { gap: var(--spacing-1); }
+.gap-2 { gap: var(--spacing-2); }
+.gap-3 { gap: var(--spacing-3); }
+.gap-4 { gap: var(--spacing-4); }
+
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(-10px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn var(--transition-normal);
+}
+
+.animate-slideIn {
+  animation: slideIn var(--transition-normal);
+}
+
+/* Splitter/Resize Handle */
+.resize-handle {
+  width: 4px;
+  background: var(--color-border);
+  cursor: col-resize;
+  transition: background var(--transition-fast);
+}
+
+.resize-handle:hover {
+  background: var(--color-primary);
+}
+
+/* Tab Styles - Document Tabs */
+.document-tabs {
+  display: flex;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding-left: var(--spacing-2);
+}
+
+.document-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  margin-right: -1px;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  position: relative;
+  top: 1px;
+}
+
+.document-tab.active {
+  background: var(--color-surface-light);
+  border-bottom: 1px solid var(--color-surface-light);
+}
+
+.document-tab-close {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.5;
+}
+
+.document-tab-close:hover {
+  opacity: 1;
+  background: #E81123;
+  color: white;
+}
