@@ -6,12 +6,14 @@ and Constrained Dynamic Time Warping (DTW).
 This module implements an industry-standard hybrid approach:
 1. Global Cross-Correlation for bulk shift detection
 2. Sakoe-Chiba Band Constrained DTW for elastic correction
+3. Batch auto-splicing with unit conversion for multiple log runs
 """
 
 import numpy as np
+import pandas as pd
 from scipy import signal
-from typing import Tuple, Dict, Optional, NamedTuple
-from dataclasses import dataclass
+from typing import Tuple, Dict, Optional, NamedTuple, List, Callable
+from dataclasses import dataclass, field
 
 
 # Default parameters
@@ -52,6 +54,29 @@ class PreprocessedSignal:
     signal_for_correlation: np.ndarray  # NaN-filled version
     mean: float
     std: float
+
+
+@dataclass
+class PreprocessedLAS:
+    """Container for a preprocessed LAS file with normalized units."""
+    filename: str
+    original_unit: str  # 'ft' or 'm'
+    df: pd.DataFrame  # DataFrame normalized to meters
+    start_depth: float  # in meters
+    stop_depth: float  # in meters
+    step: float  # in meters
+    curves: List[str] = field(default_factory=list)
+
+
+@dataclass
+class BatchSpliceResult:
+    """Container for batch splicing operation results."""
+    composite_df: pd.DataFrame
+    splice_log: List[str]
+    file_summary: List[dict]
+    total_depth_range: Tuple[float, float]
+    num_files_processed: int
+    correlation_curve: str
 
 
 # =============================================================================
@@ -608,7 +633,7 @@ def splice_logs(
     shallow_on_grid = resample_to_grid(shallow_depth, shallow_signal, common_grid)
     deep_on_grid = resample_to_grid(deep_depth_shifted, deep_signal, common_grid)
     
-    # Apply DTW correction to deep signal in overlap region
+    # Initialize corrected arrays
     corrected_deep_depth = common_grid.copy()
     corrected_deep_signal = deep_on_grid.copy()
     
@@ -616,29 +641,63 @@ def splice_logs(
     correction_delta = np.zeros_like(common_grid)
     
     if depth_mapping:
-        # For overlap region, adjust depths based on DTW
-        for orig_d, corr_d in depth_mapping.items():
-            idx = np.argmin(np.abs(common_grid - orig_d))
-            delta = orig_d - corr_d
-            correction_delta[idx] = delta
-    
-    # Interpolate correction delta smoothly
-    nonzero_mask = correction_delta != 0
-    if np.any(nonzero_mask):
-        nonzero_idx = np.where(nonzero_mask)[0]
-        nonzero_vals = correction_delta[nonzero_mask]
+        # Convert depth_mapping to arrays for interpolation
+        map_orig_depths = np.array(list(depth_mapping.keys()))
+        map_corr_depths = np.array(list(depth_mapping.values()))
         
-        # Interpolate within overlap region only
+        # Sort by original depth
+        sort_idx = np.argsort(map_orig_depths)
+        map_orig_depths = map_orig_depths[sort_idx]
+        map_corr_depths = map_corr_depths[sort_idx]
+        
+        # Get overlap region indices and depths
         overlap_idx = np.where(overlap_mask)[0]
-        if len(overlap_idx) > 0:
-            correction_interp = np.interp(
-                overlap_idx,
-                nonzero_idx,
-                nonzero_vals,
-                left=nonzero_vals[0] if len(nonzero_vals) > 0 else 0,
-                right=nonzero_vals[-1] if len(nonzero_vals) > 0 else 0
+        overlap_depths = common_grid[overlap_mask]
+        
+        if len(overlap_idx) > 0 and len(map_orig_depths) > 1:
+            # Interpolate the depth correction for all points in overlap region
+            # This gives us: for each grid point, what ORIGINAL deep depth should we sample from?
+            # map_corr_depths = reference depths (what we want to align to)
+            # map_orig_depths = original deep depths (where the values came from)
+            
+            # For each point in overlap: find what original depth maps to this corrected depth
+            # We need the inverse mapping: given a target depth, what original depth to sample
+            warped_source_depths = np.interp(
+                overlap_depths,
+                map_corr_depths,  # corrected/reference depths
+                map_orig_depths,  # original deep depths
+                left=map_orig_depths[0],
+                right=map_orig_depths[-1]
             )
-            correction_delta[overlap_idx] = correction_interp
+            
+            # Now resample the deep signal at these warped source depths
+            # Get deep signal values on the shifted depth grid
+            deep_shifted_depths = deep_depth_shifted
+            deep_shifted_signal = deep_signal
+            
+            # Sort for interpolation
+            valid_mask = ~np.isnan(deep_shifted_signal)
+            if np.sum(valid_mask) >= 2:
+                valid_depths = deep_shifted_depths[valid_mask]
+                valid_signal = deep_shifted_signal[valid_mask]
+                sort_idx = np.argsort(valid_depths)
+                valid_depths = valid_depths[sort_idx]
+                valid_signal = valid_signal[sort_idx]
+                
+                # Resample deep signal at the warped depths
+                warped_signal = np.interp(
+                    warped_source_depths,
+                    valid_depths,
+                    valid_signal,
+                    left=np.nan,
+                    right=np.nan
+                )
+                
+                # Apply the warped signal to the overlap region
+                corrected_deep_signal[overlap_idx] = warped_signal
+            
+            # Compute correction delta for visualization
+            correction_delta[overlap_idx] = overlap_depths - warped_source_depths
     
     report("merge", f"Splicing at {splice_point:.1f}m...")
     
@@ -718,4 +777,614 @@ def get_recommended_correlation_curve(common_curves: list) -> Optional[str]:
             return c
     
     return None
+
+
+# =============================================================================
+# BATCH AUTO-SPLICING WITH UNIT CONVERSION
+# =============================================================================
+
+# Standard null values to strip from top/bottom of logs
+NULL_VALUES = [-999.25, -999, -9999, -9999.25, -999.2500, -999.00]
+
+# Conversion factor: feet to meters
+FT_TO_M = 0.3048
+
+# Gap threshold for appending vs splicing (meters)
+GAP_THRESHOLD = 5.0
+
+
+def detect_las_units(las) -> str:
+    """
+    Detect depth units from LAS header.
+    
+    Checks STRT.FT, STRT.F, STRT.M patterns as specified by client data.
+    
+    Args:
+        las: lasio.LASFile object
+        
+    Returns:
+        'ft' for feet, 'm' for meters
+    """
+    try:
+        if 'STRT' in las.well:
+            unit = las.well.STRT.unit.upper()
+            # Handle FT, F, FEET variations
+            if unit in ['FT', 'F', 'FEET', 'FOOT']:
+                return 'ft'
+            elif unit in ['M', 'METER', 'METERS', 'METRE', 'METRES']:
+                return 'm'
+    except (AttributeError, KeyError):
+        pass
+    
+    # Check STEP unit as fallback
+    try:
+        if 'STEP' in las.well:
+            unit = las.well.STEP.unit.upper()
+            if unit in ['FT', 'F', 'FEET', 'FOOT']:
+                return 'ft'
+            elif unit in ['M', 'METER', 'METERS', 'METRE', 'METRES']:
+                return 'm'
+    except (AttributeError, KeyError):
+        pass
+    
+    # Check depth curve unit
+    try:
+        for curve in las.curves:
+            if curve.mnemonic.upper() in ['DEPT', 'DEPTH', 'MD']:
+                unit = curve.unit.upper()
+                if unit in ['FT', 'F', 'FEET', 'FOOT']:
+                    return 'ft'
+                elif unit in ['M', 'METER', 'METERS', 'METRE', 'METRES']:
+                    return 'm'
+    except (AttributeError, KeyError):
+        pass
+    
+    # Default to feet (common in US data)
+    return 'ft'
+
+
+def strip_null_padding(df: pd.DataFrame, depth_col: str = 'DEPTH') -> pd.DataFrame:
+    """
+    Strip leading and trailing rows where all non-depth columns are null.
+    
+    This removes padding that logging tools add at top/bottom of files.
+    
+    Args:
+        df: DataFrame with well log data
+        depth_col: Name of depth column
+        
+    Returns:
+        DataFrame with null padding removed
+    """
+    # Get non-depth columns
+    data_cols = [c for c in df.columns if c.upper() != depth_col.upper()]
+    
+    if not data_cols:
+        return df
+    
+    # Create mask for rows with any valid (non-null) data
+    # Replace known null values with NaN first
+    df_check = df[data_cols].copy()
+    for null_val in NULL_VALUES:
+        df_check = df_check.replace(null_val, np.nan)
+    
+    # Find rows with at least one valid value
+    valid_mask = df_check.notna().any(axis=1)
+    
+    if not valid_mask.any():
+        return df
+    
+    # Find first and last valid indices
+    first_valid = valid_mask.idxmax()
+    last_valid = valid_mask[::-1].idxmax()
+    
+    # Slice to valid range
+    return df.loc[first_valid:last_valid].reset_index(drop=True)
+
+
+def convert_las_to_meters(las, df: pd.DataFrame, depth_col: str = 'DEPTH') -> Tuple[pd.DataFrame, float, float, float]:
+    """
+    Convert LAS data from feet to meters if necessary.
+    
+    Args:
+        las: lasio.LASFile object (for header metadata)
+        df: DataFrame with log data
+        depth_col: Name of depth column
+        
+    Returns:
+        Tuple of (converted_df, start_depth_m, stop_depth_m, step_m)
+    """
+    original_unit = detect_las_units(las)
+    
+    df_converted = df.copy()
+    
+    if original_unit == 'ft':
+        # Convert depth column
+        if depth_col in df_converted.columns:
+            df_converted[depth_col] = df_converted[depth_col] * FT_TO_M
+        
+        # Get header values and convert
+        try:
+            start = float(las.well.STRT.value) * FT_TO_M
+            stop = float(las.well.STOP.value) * FT_TO_M
+            step = abs(float(las.well.STEP.value)) * FT_TO_M
+        except (AttributeError, ValueError, TypeError):
+            # Calculate from data if header is problematic
+            start = df_converted[depth_col].min()
+            stop = df_converted[depth_col].max()
+            step = abs(df_converted[depth_col].diff().median())
+    else:
+        # Already in meters
+        try:
+            start = float(las.well.STRT.value)
+            stop = float(las.well.STOP.value)
+            step = abs(float(las.well.STEP.value))
+        except (AttributeError, ValueError, TypeError):
+            start = df[depth_col].min()
+            stop = df[depth_col].max()
+            step = abs(df[depth_col].diff().median())
+    
+    return df_converted, start, stop, step
+
+
+def preprocess_las_files(
+    las_file_objects: List,
+    progress_callback: Optional[Callable[[str, str], None]] = None
+) -> List[PreprocessedLAS]:
+    """
+    Preprocess multiple LAS files for batch splicing.
+    
+    This function:
+    1. Loads each LAS file
+    2. Detects and normalizes units to Meters
+    3. Strips null padding from top/bottom
+    4. Returns sorted list by start depth
+    
+    Args:
+        las_file_objects: List of file-like objects or file paths
+        progress_callback: Optional callback(step, message) for progress updates
+        
+    Returns:
+        List of PreprocessedLAS objects sorted by start depth (shallowest first)
+    """
+    import lasio
+    import io
+    
+    def report(step, msg):
+        if progress_callback:
+            progress_callback(step, msg)
+    
+    preprocessed = []
+    
+    report("preprocessing", f"Processing {len(las_file_objects)} files...")
+    
+    for i, file_obj in enumerate(las_file_objects):
+        # Get filename
+        if hasattr(file_obj, 'name'):
+            filename = file_obj.name
+        elif isinstance(file_obj, str):
+            filename = file_obj.split('/')[-1]
+        else:
+            filename = f"File_{i+1}"
+        
+        report("preprocessing", f"Loading {filename}...")
+        
+        # Load LAS file
+        try:
+            if isinstance(file_obj, str):
+                las = lasio.read(file_obj)
+            elif isinstance(file_obj, bytes):
+                str_data = file_obj.decode("utf-8", errors="ignore")
+                las = lasio.read(io.StringIO(str_data))
+            else:
+                # File-like object (e.g., Streamlit UploadedFile)
+                file_obj.seek(0)
+                bytes_data = file_obj.read()
+                str_data = bytes_data.decode("utf-8", errors="ignore")
+                las = lasio.read(io.StringIO(str_data))
+        except Exception as e:
+            report("error", f"Failed to load {filename}: {str(e)}")
+            continue
+        
+        # Detect original units
+        original_unit = detect_las_units(las)
+        report("preprocessing", f"{filename}: Detected unit = {original_unit.upper()}")
+        
+        # Convert to DataFrame
+        df = las.df().reset_index()
+        
+        # Standardize depth column name
+        depth_col = df.columns[0]  # First column is always depth in lasio
+        if depth_col.upper() in ['DEPT', 'DEPTH', 'MD', 'TVD']:
+            df = df.rename(columns={depth_col: 'DEPTH'})
+        else:
+            df = df.rename(columns={depth_col: 'DEPTH'})
+        
+        # Convert to meters
+        df_meters, start_m, stop_m, step_m = convert_las_to_meters(las, df, 'DEPTH')
+        
+        if original_unit == 'ft':
+            report("preprocessing", 
+                   f"{filename}: Converted {start_m/FT_TO_M:.1f}-{stop_m/FT_TO_M:.1f} ft → "
+                   f"{start_m:.1f}-{stop_m:.1f} m")
+        
+        # Strip null padding
+        df_stripped = strip_null_padding(df_meters, 'DEPTH')
+        
+        # Check if DataFrame is empty after stripping
+        if df_stripped.empty or len(df_stripped) == 0:
+            report("warning", f"{filename}: No valid data rows after stripping null padding. Skipping file.")
+            continue
+        
+        # Recalculate bounds after stripping
+        actual_start = df_stripped['DEPTH'].min()
+        actual_stop = df_stripped['DEPTH'].max()
+        
+        rows_stripped = len(df_meters) - len(df_stripped)
+        if rows_stripped > 0:
+            report("preprocessing", 
+                   f"{filename}: Stripped {rows_stripped} null padding rows. "
+                   f"Valid depth: {actual_start:.1f}-{actual_stop:.1f} m")
+        
+        # Handle null values in data columns
+        for col in df_stripped.columns:
+            if col != 'DEPTH':
+                for null_val in NULL_VALUES:
+                    df_stripped[col] = df_stripped[col].replace(null_val, np.nan)
+        
+        # Get available curves
+        curves = [c for c in df_stripped.columns if c.upper() != 'DEPTH']
+        
+        preprocessed.append(PreprocessedLAS(
+            filename=filename,
+            original_unit=original_unit,
+            df=df_stripped,
+            start_depth=actual_start,
+            stop_depth=actual_stop,
+            step=step_m,
+            curves=curves
+        ))
+    
+    # Check if any files were successfully preprocessed
+    if not preprocessed:
+        report("error", "No valid LAS files could be preprocessed.")
+        return preprocessed
+    
+    # Sort by start depth (shallowest first)
+    preprocessed.sort(key=lambda x: x.start_depth)
+    
+    report("preprocessing", 
+           f"Sorted {len(preprocessed)} files by depth. "
+           f"Range: {preprocessed[0].start_depth:.1f}m to {preprocessed[-1].stop_depth:.1f}m")
+    
+    return preprocessed
+
+
+def _merge_dataframes_with_gap(
+    composite_df: pd.DataFrame,
+    next_df: pd.DataFrame,
+    composite_end: float,
+    next_start: float,
+    step: float
+) -> pd.DataFrame:
+    """
+    Merge two DataFrames with a gap between them.
+    
+    Creates NaN-filled rows to bridge the gap.
+    
+    Args:
+        composite_df: Current composite DataFrame
+        next_df: Next DataFrame to append
+        composite_end: End depth of composite
+        next_start: Start depth of next file
+        step: Depth step for filling gap
+        
+    Returns:
+        Merged DataFrame
+    """
+    # Create gap fill with NaN values
+    gap_depths = np.arange(composite_end + step, next_start, step)
+    
+    if len(gap_depths) > 0:
+        # Create gap DataFrame with NaN for all columns except DEPTH
+        gap_data = {'DEPTH': gap_depths}
+        for col in composite_df.columns:
+            if col != 'DEPTH':
+                gap_data[col] = np.nan
+        gap_df = pd.DataFrame(gap_data)
+        
+        # Concatenate: composite + gap + next
+        merged = pd.concat([composite_df, gap_df, next_df], ignore_index=True)
+    else:
+        # Just concatenate directly
+        merged = pd.concat([composite_df, next_df], ignore_index=True)
+    
+    # Sort by depth and remove duplicates
+    merged = merged.sort_values('DEPTH').drop_duplicates(subset=['DEPTH']).reset_index(drop=True)
+    
+    return merged
+
+
+def _align_dataframe_columns(df1: pd.DataFrame, df2: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Ensure both DataFrames have the same columns.
+    
+    Args:
+        df1: First DataFrame
+        df2: Second DataFrame
+        
+    Returns:
+        Tuple of aligned DataFrames
+    """
+    all_cols = set(df1.columns) | set(df2.columns)
+    
+    for col in all_cols:
+        if col not in df1.columns:
+            df1[col] = np.nan
+        if col not in df2.columns:
+            df2[col] = np.nan
+    
+    # Reorder columns consistently
+    col_order = ['DEPTH'] + sorted([c for c in all_cols if c != 'DEPTH'])
+    df1 = df1[col_order]
+    df2 = df2[col_order]
+    
+    return df1, df2
+
+
+def batch_splice_pipeline(
+    preprocessed_files: List[PreprocessedLAS],
+    correlation_curve: str,
+    grid_step: float = DEFAULT_GRID_STEP,
+    max_search_meters: float = DEFAULT_SEARCH_WINDOW,
+    max_elastic_meters: float = DEFAULT_DTW_WINDOW,
+    progress_callback: Optional[Callable[[str, str], None]] = None
+) -> BatchSpliceResult:
+    """
+    Chain-splice multiple preprocessed LAS files into a single composite log.
+    
+    This function implements the "chain splice" algorithm:
+    1. Start with the shallowest file as the composite
+    2. For each subsequent file:
+       - If gap > 5m: Append with NaN fill
+       - If overlap: Use correlation + DTW splicing
+    3. Return final composite
+    
+    Args:
+        preprocessed_files: List of PreprocessedLAS from preprocess_las_files()
+        correlation_curve: Curve name to use for correlation (e.g., 'GR')
+        grid_step: Resampling grid step in meters
+        max_search_meters: Max search window for cross-correlation
+        max_elastic_meters: Max elastic stretch for DTW
+        progress_callback: Optional callback(step, message) for progress updates
+        
+    Returns:
+        BatchSpliceResult with composite DataFrame and metadata
+    """
+    def report(step, msg):
+        if progress_callback:
+            progress_callback(step, msg)
+    
+    # Preserve original correlation curve for return value
+    # Use a local variable for potential fallback assignments
+    active_correlation_curve = correlation_curve
+    
+    if len(preprocessed_files) == 0:
+        raise ValueError("No files to splice")
+    
+    if len(preprocessed_files) == 1:
+        # Single file - just return it
+        single = preprocessed_files[0]
+        return BatchSpliceResult(
+            composite_df=single.df,
+            splice_log=["Single file - no splicing required"],
+            file_summary=[{
+                'filename': single.filename,
+                'original_unit': single.original_unit,
+                'start_m': single.start_depth,
+                'stop_m': single.stop_depth,
+                'action': 'Base file'
+            }],
+            total_depth_range=(single.start_depth, single.stop_depth),
+            num_files_processed=1,
+            correlation_curve=correlation_curve
+        )
+    
+    splice_log = []
+    file_summary = []
+    
+    # Initialize composite with first (shallowest) file
+    first_file = preprocessed_files[0]
+    composite_df = first_file.df.copy()
+    composite_end = first_file.stop_depth
+    composite_step = first_file.step
+    
+    file_summary.append({
+        'filename': first_file.filename,
+        'original_unit': first_file.original_unit,
+        'start_m': first_file.start_depth,
+        'stop_m': first_file.stop_depth,
+        'action': 'Base file (shallowest)'
+    })
+    
+    report("splicing", f"Initialized composite with {first_file.filename} "
+           f"({first_file.start_depth:.1f}m - {first_file.stop_depth:.1f}m)")
+    splice_log.append(f"Run 1: {first_file.filename} initialized as base "
+                     f"({first_file.start_depth:.1f}m - {first_file.stop_depth:.1f}m)")
+    
+    # Process remaining files
+    for i, next_file in enumerate(preprocessed_files[1:], start=2):
+        report("splicing", f"Processing Run {i}: {next_file.filename}...")
+        
+        next_start = next_file.start_depth
+        next_end = next_file.stop_depth
+        
+        # Align columns between composite and next file
+        composite_df, next_df = _align_dataframe_columns(composite_df, next_file.df.copy())
+        
+        # Calculate gap/overlap
+        gap = next_start - composite_end
+        
+        if gap > GAP_THRESHOLD:
+            # GAP CASE: No overlap, just append with NaN fill
+            report("splicing", f"Run {i-1} & Run {i}: Gap detected ({gap:.1f}m). Appending...")
+            
+            composite_df = _merge_dataframes_with_gap(
+                composite_df, next_df,
+                composite_end, next_start,
+                composite_step
+            )
+            
+            action = f"Appended (gap: {gap:.1f}m)"
+            splice_log.append(f"Run {i-1} & Run {i}: Gap detected ({gap:.1f}m). Data appended.")
+            
+        else:
+            # OVERLAP CASE: Use correlation + DTW splicing
+            overlap_amount = composite_end - next_start
+            
+            if overlap_amount <= 0:
+                # Edge case: files just touch, treat as small gap
+                report("splicing", f"Run {i-1} & Run {i}: Files touch at boundary. Appending...")
+                composite_df = pd.concat([composite_df, next_df], ignore_index=True)
+                composite_df = composite_df.sort_values('DEPTH').drop_duplicates(
+                    subset=['DEPTH']).reset_index(drop=True)
+                action = "Appended (no overlap)"
+                splice_log.append(f"Run {i-1} & Run {i}: No overlap. Data appended.")
+            else:
+                # Real overlap - use splicing algorithm
+                report("splicing", f"Run {i-1} & Run {i}: Found {overlap_amount:.1f}m overlap. "
+                       "Running correlation + DTW...")
+                
+                # Check if correlation curve exists in both
+                # Use local variable for this iteration's curve selection
+                iter_correlation_curve = active_correlation_curve
+                
+                if iter_correlation_curve not in composite_df.columns:
+                    report("warning", f"Correlation curve {iter_correlation_curve} not in composite. "
+                           "Using first available curve.")
+                    available = [c for c in composite_df.columns if c != 'DEPTH']
+                    if available:
+                        iter_correlation_curve = available[0]
+                    else:
+                        # No curves to correlate, just append
+                        composite_df = pd.concat([composite_df, next_df], ignore_index=True)
+                        composite_df = composite_df.sort_values('DEPTH').drop_duplicates(
+                            subset=['DEPTH']).reset_index(drop=True)
+                        action = "Appended (no curves for correlation)"
+                        splice_log.append(f"Run {i-1} & Run {i}: Appended (no correlation curve)")
+                        file_summary.append({
+                            'filename': next_file.filename,
+                            'original_unit': next_file.original_unit,
+                            'start_m': next_start,
+                            'stop_m': next_end,
+                            'action': action
+                        })
+                        composite_end = max(composite_end, next_end)
+                        continue
+                
+                if iter_correlation_curve not in next_df.columns:
+                    # No correlation curve in next file
+                    report("warning", f"Correlation curve {iter_correlation_curve} not in {next_file.filename}. "
+                           "Appending without alignment.")
+                    composite_df = pd.concat([composite_df, next_df], ignore_index=True)
+                    composite_df = composite_df.sort_values('DEPTH').drop_duplicates(
+                        subset=['DEPTH']).reset_index(drop=True)
+                    action = f"Appended (no {iter_correlation_curve} curve)"
+                    splice_log.append(f"Run {i-1} & Run {i}: Appended without alignment")
+                    file_summary.append({
+                        'filename': next_file.filename,
+                        'original_unit': next_file.original_unit,
+                        'start_m': next_start,
+                        'stop_m': next_end,
+                        'action': action
+                    })
+                    composite_end = max(composite_end, next_end)
+                    continue
+                
+                try:
+                    # Extract overlap region data for splicing
+                    shallow_depth = composite_df['DEPTH'].values
+                    shallow_signal = composite_df[iter_correlation_curve].values
+                    deep_depth = next_df['DEPTH'].values
+                    deep_signal = next_df[iter_correlation_curve].values
+                    
+                    # Run the splice algorithm
+                    result = splice_logs(
+                        shallow_depth=shallow_depth,
+                        shallow_signal=shallow_signal,
+                        deep_depth=deep_depth,
+                        deep_signal=deep_signal,
+                        grid_step=grid_step,
+                        max_search_meters=max_search_meters,
+                        max_elastic_meters=max_elastic_meters,
+                        progress_callback=None  # Don't forward inner progress
+                    )
+                    
+                    shift_str = f"{abs(result.bulk_shift_meters):.2f}m"
+                    shift_dir = "shallower" if result.bulk_shift_meters > 0 else "deeper"
+                    
+                    report("splicing", f"Run {i-1} & Run {i}: Correlation shift: {shift_str} ({shift_dir})")
+                    
+                    # Apply the bulk shift to the next file's depth
+                    next_df_shifted = next_df.copy()
+                    next_df_shifted['DEPTH'] = next_df_shifted['DEPTH'] - result.bulk_shift_meters
+                    
+                    # Splice at the midpoint
+                    splice_point = result.splice_point
+                    
+                    # Take composite up to splice point
+                    composite_upper = composite_df[composite_df['DEPTH'] < splice_point].copy()
+                    
+                    # Take shifted next file from splice point onwards
+                    next_lower = next_df_shifted[next_df_shifted['DEPTH'] >= splice_point].copy()
+                    
+                    # Merge
+                    composite_df = pd.concat([composite_upper, next_lower], ignore_index=True)
+                    composite_df = composite_df.sort_values('DEPTH').reset_index(drop=True)
+                    
+                    action = f"Spliced (shift: {shift_str} {shift_dir}, overlap: {overlap_amount:.1f}m)"
+                    splice_log.append(f"Run {i-1} & Run {i}: {overlap_amount:.1f}m overlap. "
+                                     f"Shift: {shift_str} ({shift_dir}). "
+                                     f"Splice point: {splice_point:.1f}m")
+                    
+                except Exception as e:
+                    # Splicing failed, fall back to simple append
+                    report("warning", f"Splicing failed for Run {i}: {str(e)}. Appending instead.")
+                    composite_df = pd.concat([composite_df, next_df], ignore_index=True)
+                    composite_df = composite_df.sort_values('DEPTH').drop_duplicates(
+                        subset=['DEPTH']).reset_index(drop=True)
+                    action = f"Appended (splice failed: {str(e)[:30]})"
+                    splice_log.append(f"Run {i-1} & Run {i}: Splice failed. Appended instead.")
+        
+        file_summary.append({
+            'filename': next_file.filename,
+            'original_unit': next_file.original_unit,
+            'start_m': next_start,
+            'stop_m': next_end,
+            'action': action
+        })
+        
+        # Update composite end depth
+        composite_end = composite_df['DEPTH'].max()
+    
+    # Final cleanup
+    composite_df = composite_df.sort_values('DEPTH').reset_index(drop=True)
+    
+    total_start = composite_df['DEPTH'].min()
+    total_end = composite_df['DEPTH'].max()
+    
+    report("complete", f"Batch splicing complete! "
+           f"Composite range: {total_start:.1f}m - {total_end:.1f}m "
+           f"({len(composite_df)} samples)")
+    
+    splice_log.append(f"Final composite: {total_start:.1f}m - {total_end:.1f}m ({len(composite_df)} samples)")
+    
+    return BatchSpliceResult(
+        composite_df=composite_df,
+        splice_log=splice_log,
+        file_summary=file_summary,
+        total_depth_range=(total_start, total_end),
+        num_files_processed=len(preprocessed_files),
+        correlation_curve=correlation_curve
+    )
 
