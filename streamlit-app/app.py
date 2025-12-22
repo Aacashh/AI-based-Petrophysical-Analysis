@@ -138,17 +138,17 @@ with col1:
 with col2:
     st.markdown("""
     <div class="feature-card">
-        <div class="feature-icon">🔗</div>
-        <div class="feature-title">AI Splicing <span class="badge-new">NEW</span></div>
+        <div class="feature-icon">🧠</div>
+        <div class="feature-title">AI/ML Lab <span class="badge-new">NEW</span></div>
         <div class="feature-desc">
-            Automated merging of overlapping logging runs using AI-powered alignment.
+            Advanced machine learning features with real-time model training.
             <br><br>
             <strong>Features:</strong>
             <ul>
-                <li>Global cross-correlation for bulk shift detection</li>
-                <li>Constrained DTW for elastic correction</li>
-                <li>Educational "glass box" step-by-step display</li>
-                <li>Professional QC plotting</li>
+                <li>Outlier Detection (Isolation Forest, LOF)</li>
+                <li>Bayesian Hyperparameter Optimization</li>
+                <li>LSTM & CNN Neural Networks</li>
+                <li>Uncertainty Quantification</li>
             </ul>
         </div>
     </div>
@@ -174,7 +174,7 @@ st.markdown("""
 
 - For best visualization results, use the 1:500 scale for detailed analysis
 - Enable "Density-Neutron Crossover" to highlight gas effects
-- Use the AI Splicing tool when merging shallow and deep logging runs
+- Try the **AI/ML Lab** for advanced outlier detection and neural network-based alignment
 """)
 
 # Sidebar info
@@ -192,5 +192,5 @@ with st.sidebar:
     
     Professional well log analysis suite for petrophysicists and geoscientists.
     
-    Version: 1.1.0
+    Version: 2.0.0
     """)

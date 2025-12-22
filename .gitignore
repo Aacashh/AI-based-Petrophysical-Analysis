@@ -207,4 +207,12 @@ marimo/_lsp/
 __marimo__/
 
 las_analysis_report.md
+client_data_gaps_analysis.md
+
+# Internal documentation (not for client distribution)
+INTERNAL_AI_ML_TECHNICAL_ANALYSIS.md
+INTERNAL_AI_ML_ENHANCEMENT_RESEARCH.md
+INTERNAL_*.md
+
 2025 
+deliverables

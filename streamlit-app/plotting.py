@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
-from matplotlib.ticker import LogLocator, LogFormatter
+from matplotlib.ticker import LogLocator, LogFormatter, AutoMinorLocator
+import matplotlib.gridspec as gridspec
 
-# Industry-standard colors
+# Industry-standard colors (Schlumberger/Techlog style)
 COLORS = {
     'GR': '#00AA00',           # Green for Gamma Ray
     'GR_FILL': '#90EE90',      # Light green for sand shading
@@ -15,9 +16,760 @@ COLORS = {
     'CROSS_GAS': '#FFFF00',    # Yellow for gas crossover
     'CROSS_SHALE': '#808080',  # Grey for shale crossover
     'GRID': '#CCCCCC',         # Light grey grid
-    'TRACK_BG': '#FAFAFA',     # Near-white track background
+    'TRACK_BG': '#FFFFFF',     # White track background
+    'HEADER_BG': '#F2F2F2',    # Light grey header background
     'BORDER': '#333333',       # Dark border
 }
+
+# Standard curve ranges per industry guidelines
+STANDARD_RANGES = {
+    'GR': (0, 150),           # 0-150 API
+    'RES': (0.2, 2000),       # 0.2-2000 ohm-m (log scale)
+    'RHOB': (1.95, 2.95),     # 1.95-2.95 g/cc
+    'NPHI': (-0.15, 0.45),    # -0.15-0.45 v/v (reversed for overlay)
+}
+
+
+def create_professional_log_display(
+    df,
+    mapping,
+    header_info=None,
+    settings=None,
+    show_gr_fill=True,
+    show_dn_crossover=True,
+    highlight_mask=None,
+    highlight_color='red',
+    highlight_alpha=0.2
+):
+    """
+    Creates a professional multi-track well log display following industry standards.
+    
+    Layout follows Schlumberger Techlog / IP (Interactive Petrophysics) style:
+    - Track 1: Gamma Ray (GR) with sand shading
+    - Track 2: Resistivity curves (Deep, Medium, Shallow) - logarithmic
+    - Track 3: Density-Neutron overlay with crossover fill
+    
+    Args:
+        df: DataFrame with log data (must include 'DEPTH' column)
+        mapping: Curve mapping dictionary (e.g., {'GR': 'GR', 'RES_DEEP': 'RT'})
+        header_info: Dictionary with well header info (WELL, FIELD, LOC, STRT, STOP, STEP)
+        settings: Plot settings (scale_ratio, depth_unit, etc.)
+        show_gr_fill: Enable GR sand indication shading (right-fill)
+        show_dn_crossover: Enable Density-Neutron crossover fill
+        highlight_mask: Optional boolean mask for highlighting regions
+        highlight_color: Color for highlighted regions
+        highlight_alpha: Alpha for highlighted regions
+        
+    Returns:
+        Matplotlib figure
+    """
+    if settings is None:
+        settings = {}
+    
+    # Get depth data
+    depth = df['DEPTH'].values
+    depth_min = np.nanmin(depth)
+    depth_max = np.nanmax(depth)
+    depth_range = depth_max - depth_min
+    
+    # Calculate figure dimensions
+    scale_ratio = settings.get('scale_ratio', 500)
+    depth_unit = settings.get('depth_unit', 'm')
+    
+    # Height based on depth range and scale (industry standard sizing)
+    height_cm = (depth_range * 100) / scale_ratio
+    height_in = max(8, min(30, height_cm / 2.54))  # Clamp between 8-30 inches
+    
+    # Track widths: ~3.5 inches each (≈350px at 100dpi)
+    # 3 tracks + depth track + spacing = ~14 inches total
+    track_width = 3.5
+    depth_track_width = 0.8
+    header_height_ratio = 0.08 if header_info else 0.02
+    
+    fig_width = depth_track_width + (track_width * 3) + 1.5
+    
+    # Create figure with GridSpec for header + tracks
+    fig = plt.figure(figsize=(fig_width, height_in), facecolor='white')
+    
+    # GridSpec: header row + main tracks row
+    if header_info:
+        gs = gridspec.GridSpec(2, 4, figure=fig, 
+                               height_ratios=[header_height_ratio, 1-header_height_ratio],
+                               width_ratios=[depth_track_width, track_width, track_width, track_width],
+                               wspace=0.02, hspace=0.02)
+        
+        # Header spanning all columns
+        ax_header = fig.add_subplot(gs[0, :])
+        _draw_well_header(ax_header, header_info, depth_unit)
+        
+        # Track axes
+        ax_depth = fig.add_subplot(gs[1, 0])
+        ax_gr = fig.add_subplot(gs[1, 1], sharey=ax_depth)
+        ax_res = fig.add_subplot(gs[1, 2], sharey=ax_depth)
+        ax_dn = fig.add_subplot(gs[1, 3], sharey=ax_depth)
+    else:
+        gs = gridspec.GridSpec(1, 4, figure=fig,
+                               width_ratios=[depth_track_width, track_width, track_width, track_width],
+                               wspace=0.02)
+        
+        ax_depth = fig.add_subplot(gs[0, 0])
+        ax_gr = fig.add_subplot(gs[0, 1], sharey=ax_depth)
+        ax_res = fig.add_subplot(gs[0, 2], sharey=ax_depth)
+        ax_dn = fig.add_subplot(gs[0, 3], sharey=ax_depth)
+    
+    axes = [ax_depth, ax_gr, ax_res, ax_dn]
+    
+    # =========================================================================
+    # DEPTH TRACK (leftmost)
+    # =========================================================================
+    _draw_depth_track(ax_depth, depth, depth_min, depth_max, depth_unit)
+    
+    # =========================================================================
+    # TRACK 1: GAMMA RAY
+    # =========================================================================
+    _draw_gr_track(ax_gr, df, mapping, depth, settings, show_gr_fill, highlight_mask, highlight_color, highlight_alpha)
+    
+    # =========================================================================
+    # TRACK 2: RESISTIVITY (Logarithmic)
+    # =========================================================================
+    _draw_resistivity_track(ax_res, df, mapping, depth, settings, highlight_mask, highlight_color, highlight_alpha)
+    
+    # =========================================================================
+    # TRACK 3: DENSITY-NEUTRON OVERLAY
+    # =========================================================================
+    _draw_density_neutron_track(ax_dn, df, mapping, depth, settings, show_dn_crossover, highlight_mask, highlight_color, highlight_alpha)
+    
+    # Set depth limits (inverted - depth increases downward)
+    ax_depth.set_ylim(depth_max, depth_min)
+    
+    # Hide y-axis labels on non-depth tracks
+    for ax in [ax_gr, ax_res, ax_dn]:
+        plt.setp(ax.get_yticklabels(), visible=False)
+    
+    plt.tight_layout()
+    
+    return fig
+
+
+def _draw_well_header(ax, header_info, depth_unit='m'):
+    """Draw well header panel at top of log display."""
+    ax.set_facecolor(COLORS['HEADER_BG'])
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis('off')
+    
+    # Add border
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color(COLORS['BORDER'])
+        spine.set_linewidth(1)
+    
+    # Well name (large, bold, centered)
+    well_name = header_info.get('WELL', 'Unknown Well')
+    ax.text(0.5, 0.75, well_name, fontsize=14, fontweight='bold',
+            ha='center', va='center', transform=ax.transAxes)
+    
+    # Build metadata line
+    metadata_parts = []
+    
+    if header_info.get('FIELD'):
+        metadata_parts.append(f"FIELD: {header_info['FIELD']}")
+    
+    if header_info.get('LOC'):
+        metadata_parts.append(f"LOC: {header_info['LOC']}")
+    
+    # Depth range
+    strt = header_info.get('STRT', '')
+    stop = header_info.get('STOP', '')
+    if strt and stop:
+        metadata_parts.append(f"DEPTH: {strt:.1f} - {stop:.1f} {depth_unit}")
+    
+    # Step
+    step = header_info.get('STEP', '')
+    if step:
+        metadata_parts.append(f"STEP: {step:.4f} {depth_unit}")
+    
+    metadata_text = '  |  '.join(metadata_parts)
+    ax.text(0.5, 0.35, metadata_text, fontsize=9, ha='center', va='center',
+            transform=ax.transAxes, color='#555555')
+
+
+def _draw_depth_track(ax, depth, depth_min, depth_max, depth_unit='m'):
+    """Draw the depth track on the left side."""
+    ax.set_facecolor(COLORS['TRACK_BG'])
+    ax.set_xlim(0, 1)
+    
+    # Style
+    ax.set_ylabel(f"Depth ({depth_unit})", fontsize=10, fontweight='bold')
+    ax.yaxis.set_tick_params(labelsize=8)
+    ax.xaxis.set_visible(False)
+    
+    # Grid lines
+    ax.yaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.grid(True, which='minor', linestyle=':', linewidth=0.3, color=COLORS['GRID'], alpha=0.4)
+    
+    # Border
+    for spine in ax.spines.values():
+        spine.set_color(COLORS['BORDER'])
+        spine.set_linewidth(1)
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+
+def _draw_gr_track(ax, df, mapping, depth, settings, show_fill=True, 
+                   highlight_mask=None, highlight_color='red', highlight_alpha=0.2):
+    """Draw Gamma Ray track with optional sand shading."""
+    ax.set_facecolor(COLORS['TRACK_BG'])
+    
+    # Track header
+    ax.set_title("GAMMA RAY\n(API)", fontsize=9, fontweight='bold', pad=8,
+                 color=COLORS['GR'])
+    
+    # Get range from settings or use standard
+    gr_min = settings.get('gr_min', STANDARD_RANGES['GR'][0])
+    gr_max = settings.get('gr_max', STANDARD_RANGES['GR'][1])
+    ax.set_xlim(gr_min, gr_max)
+    
+    # Grid
+    ax.xaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax.yaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.xaxis.grid(True, which='minor', linestyle=':', linewidth=0.3, color=COLORS['GRID'], alpha=0.4)
+    
+    # X-axis styling
+    ax.xaxis.set_label_position('top')
+    ax.xaxis.tick_top()
+    ax.tick_params(axis='x', colors=COLORS['GR'], labelsize=7)
+    ax.spines['top'].set_color(COLORS['GR'])
+    ax.spines['top'].set_linewidth(2)
+    
+    # Border
+    for spine in ['bottom', 'left', 'right']:
+        ax.spines[spine].set_color(COLORS['BORDER'])
+        ax.spines[spine].set_linewidth(1)
+    
+    # Plot GR curve
+    gr_col = mapping.get('GR')
+    if gr_col and gr_col in df.columns:
+        gr_data = df[gr_col].values.copy()
+        
+        # Handle missing data - create masked array
+        valid_mask = ~np.isnan(gr_data)
+        
+        # Plot curve (line thickness 1.5px as per guidelines)
+        ax.plot(gr_data, depth, color=COLORS['GR'], linewidth=1.5, label='GR')
+        
+        # Sand shading (fill from curve to left edge = low GR = sand)
+        if show_fill:
+            ax.fill_betweenx(depth, gr_data, gr_min,
+                            where=valid_mask,
+                            color=COLORS['GR_FILL'], alpha=0.4)
+    else:
+        ax.text(0.5, 0.5, "No GR Data", transform=ax.transAxes,
+                ha='center', va='center', fontsize=10, color='gray')
+    
+    # Highlight regions if provided
+    if highlight_mask is not None:
+        _add_highlight_shading(ax, depth, highlight_mask, gr_min, gr_max, 
+                               highlight_color, highlight_alpha)
+
+
+def _draw_resistivity_track(ax, df, mapping, depth, settings,
+                            highlight_mask=None, highlight_color='red', highlight_alpha=0.2):
+    """Draw Resistivity track with logarithmic scale."""
+    ax.set_facecolor(COLORS['TRACK_BG'])
+    
+    # Track header
+    ax.set_title("RESISTIVITY\n(ohm.m)", fontsize=9, fontweight='bold', pad=8)
+    
+    # Logarithmic scale
+    ax.set_xscale('log')
+    
+    # Get range from settings or use standard
+    res_min = settings.get('res_min', STANDARD_RANGES['RES'][0])
+    res_max = settings.get('res_max', STANDARD_RANGES['RES'][1])
+    ax.set_xlim(res_min, res_max)
+    
+    # Grid (log scale)
+    ax.xaxis.grid(True, which='major', linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax.xaxis.grid(True, which='minor', linestyle=':', linewidth=0.3, color=COLORS['GRID'], alpha=0.4)
+    ax.yaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    
+    # Log tick locator
+    ax.xaxis.set_major_locator(LogLocator(base=10, numticks=10))
+    
+    # X-axis styling
+    ax.xaxis.set_label_position('top')
+    ax.xaxis.tick_top()
+    ax.tick_params(axis='x', labelsize=7)
+    
+    # Border
+    for spine in ax.spines.values():
+        spine.set_color(COLORS['BORDER'])
+        spine.set_linewidth(1)
+    
+    # Legend items
+    legend_handles = []
+    
+    # Plot Deep Resistivity (Blue)
+    res_deep_col = mapping.get('RES_DEEP')
+    if res_deep_col and res_deep_col in df.columns:
+        data = df[res_deep_col].values.copy()
+        # Filter valid positive values for log scale
+        data[data <= 0] = np.nan
+        ax.plot(data, depth, color=COLORS['RES_DEEP'], linewidth=1.5, label='Deep')
+        legend_handles.append(mpatches.Patch(color=COLORS['RES_DEEP'], label='Deep'))
+    
+    # Plot Medium Resistivity (Red)
+    res_med_col = mapping.get('RES_MED')
+    if res_med_col and res_med_col in df.columns:
+        data = df[res_med_col].values.copy()
+        data[data <= 0] = np.nan
+        ax.plot(data, depth, color=COLORS['RES_MED'], linewidth=1.5, label='Med')
+        legend_handles.append(mpatches.Patch(color=COLORS['RES_MED'], label='Med'))
+    
+    # Plot Shallow Resistivity (Orange)
+    res_shal_col = mapping.get('RES_SHAL')
+    if res_shal_col and res_shal_col in df.columns:
+        data = df[res_shal_col].values.copy()
+        data[data <= 0] = np.nan
+        ax.plot(data, depth, color=COLORS['RES_SHAL'], linewidth=1.5, label='Shallow')
+        legend_handles.append(mpatches.Patch(color=COLORS['RES_SHAL'], label='Shallow'))
+    
+    if legend_handles:
+        ax.legend(handles=legend_handles, loc='lower right', fontsize=6,
+                 framealpha=0.9, edgecolor=COLORS['BORDER'])
+    else:
+        ax.text(0.5, 0.5, "No Resistivity Data", transform=ax.transAxes,
+                ha='center', va='center', fontsize=10, color='gray')
+    
+    # Highlight regions
+    if highlight_mask is not None:
+        _add_highlight_shading(ax, depth, highlight_mask, res_min, res_max,
+                               highlight_color, highlight_alpha)
+
+
+def _draw_density_neutron_track(ax, df, mapping, depth, settings, show_crossover=True,
+                                highlight_mask=None, highlight_color='red', highlight_alpha=0.2):
+    """Draw Density-Neutron overlay track with crossover fill."""
+    ax.set_facecolor(COLORS['TRACK_BG'])
+    
+    # Track header
+    ax.set_title("DENSITY-NEUTRON", fontsize=9, fontweight='bold', pad=8)
+    
+    # Primary axis: Density (RHOB) - Red
+    dens_min = settings.get('dens_min', STANDARD_RANGES['RHOB'][0])
+    dens_max = settings.get('dens_max', STANDARD_RANGES['RHOB'][1])
+    ax.set_xlim(dens_min, dens_max)
+    
+    # Grid
+    ax.xaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax.yaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.xaxis.grid(True, which='minor', linestyle=':', linewidth=0.3, color=COLORS['GRID'], alpha=0.4)
+    
+    # Primary x-axis styling (Density - top)
+    ax.xaxis.set_label_position('top')
+    ax.xaxis.tick_top()
+    ax.set_xlabel("RHOB (g/cc)", fontsize=8, color=COLORS['DENS'], fontweight='bold')
+    ax.tick_params(axis='x', colors=COLORS['DENS'], labelsize=7)
+    ax.spines['top'].set_color(COLORS['DENS'])
+    ax.spines['top'].set_linewidth(2)
+    
+    # Border
+    for spine in ['bottom', 'left', 'right']:
+        ax.spines[spine].set_color(COLORS['BORDER'])
+        ax.spines[spine].set_linewidth(1)
+    
+    # Secondary axis: Neutron (NPHI) - Blue (reversed scale)
+    ax_neut = ax.twiny()
+    neut_min = settings.get('neut_min', STANDARD_RANGES['NPHI'][0])
+    neut_max = settings.get('neut_max', STANDARD_RANGES['NPHI'][1])
+    ax_neut.set_xlim(neut_max, neut_min)  # REVERSED for overlay
+    
+    ax_neut.set_xlabel("NPHI (v/v)", fontsize=8, color=COLORS['NEUT'], fontweight='bold')
+    ax_neut.tick_params(axis='x', colors=COLORS['NEUT'], labelsize=7)
+    ax_neut.spines['top'].set_position(('outward', 30))
+    ax_neut.spines['top'].set_color(COLORS['NEUT'])
+    ax_neut.spines['top'].set_linewidth(2)
+    
+    # Get data
+    dens_col = mapping.get('DENS')
+    neut_col = mapping.get('NEUT')
+    
+    dens_data = None
+    neut_data = None
+    
+    # Plot Density (Red, solid)
+    if dens_col and dens_col in df.columns:
+        dens_data = df[dens_col].values.copy()
+        ax.plot(dens_data, depth, color=COLORS['DENS'], linewidth=1.5, label='RHOB')
+    
+    # Plot Neutron (Blue, dashed for distinction)
+    if neut_col and neut_col in df.columns:
+        neut_data = df[neut_col].values.copy()
+        ax_neut.plot(neut_data, depth, color=COLORS['NEUT'], linewidth=1.5, 
+                     linestyle='--', label='NPHI')
+        
+        # Crossover fill between Density and Neutron
+        if show_crossover and dens_data is not None:
+            # Transform neutron to density axis for overlay comparison
+            neut_transformed = _transform_nphi_to_rhob(neut_data, neut_min, neut_max, 
+                                                        dens_min, dens_max)
+            
+            valid = ~np.isnan(dens_data) & ~np.isnan(neut_transformed)
+            
+            # Gas effect: NPHI crosses left of RHOB (neutron < density on transformed scale)
+            ax.fill_betweenx(depth, dens_data, neut_transformed,
+                            where=valid & (neut_transformed < dens_data),
+                            color=COLORS['CROSS_GAS'], alpha=0.4,
+                            label='Gas Effect')
+            
+            # Shale: RHOB crosses left of NPHI (density < neutron on transformed scale)
+            ax.fill_betweenx(depth, dens_data, neut_transformed,
+                            where=valid & (dens_data < neut_transformed),
+                            color=COLORS['CROSS_SHALE'], alpha=0.3,
+                            label='Shale')
+    
+    # Legend
+    legend_handles = []
+    if dens_data is not None:
+        legend_handles.append(mpatches.Patch(color=COLORS['DENS'], label='RHOB'))
+    if neut_data is not None:
+        legend_handles.append(mpatches.Patch(color=COLORS['NEUT'], label='NPHI'))
+    
+    if legend_handles:
+        ax.legend(handles=legend_handles, loc='lower right', fontsize=6,
+                 framealpha=0.9, edgecolor=COLORS['BORDER'])
+    elif dens_data is None and neut_data is None:
+        ax.text(0.5, 0.5, "No Density/Neutron Data", transform=ax.transAxes,
+                ha='center', va='center', fontsize=10, color='gray')
+    
+    # Highlight regions
+    if highlight_mask is not None:
+        _add_highlight_shading(ax, depth, highlight_mask, dens_min, dens_max,
+                               highlight_color, highlight_alpha)
+
+
+def _transform_nphi_to_rhob(nphi_data, nphi_min, nphi_max, rhob_min, rhob_max):
+    """Transform NPHI values to RHOB axis scale for overlay comparison."""
+    # Normalize to 0-1, then reverse (because NPHI scale is inverted)
+    normalized = (nphi_data - nphi_min) / (nphi_max - nphi_min)
+    reversed_norm = 1 - normalized
+    # Scale to RHOB axis
+    return rhob_min + reversed_norm * (rhob_max - rhob_min)
+
+
+def _add_highlight_shading(ax, depth, mask, x_min, x_max, color, alpha):
+    """Add vertical shading to highlight specific depth regions."""
+    if mask is None or len(mask) != len(depth):
+        return
+    
+    # Find contiguous highlighted regions
+    changes = np.diff(mask.astype(int))
+    starts = np.where(changes == 1)[0] + 1
+    ends = np.where(changes == -1)[0] + 1
+    
+    # Handle edge cases
+    if mask[0]:
+        starts = np.concatenate([[0], starts])
+    if mask[-1]:
+        ends = np.concatenate([ends, [len(mask)]])
+    
+    # Draw shaded rectangles
+    for start, end in zip(starts, ends):
+        if start < len(depth) and end <= len(depth):
+            d_start = depth[start]
+            d_end = depth[min(end, len(depth)-1)]
+            ax.axhspan(d_start, d_end, alpha=alpha, color=color, zorder=0)
+
+
+def create_before_after_comparison(
+    df_before, 
+    df_after, 
+    curve_name,
+    mapping=None,
+    header_info=None,
+    settings=None,
+    highlight_mask=None,
+    title_before="BEFORE",
+    title_after="AFTER"
+):
+    """
+    Create a side-by-side before/after comparison of a single curve.
+    
+    Professional vertical log style with depth on left, curves displayed
+    in industry-standard format.
+    
+    Args:
+        df_before: DataFrame with original data
+        df_after: DataFrame with processed data
+        curve_name: Name of the curve to compare
+        mapping: Curve mapping dictionary
+        header_info: Well header information
+        settings: Plot settings
+        highlight_mask: Boolean mask for outliers/noise (applied to before plot)
+        title_before: Title for before panel
+        title_after: Title for after panel
+        
+    Returns:
+        Matplotlib figure
+    """
+    if settings is None:
+        settings = {}
+    
+    # Get depth data
+    depth_before = df_before['DEPTH'].values
+    depth_after = df_after['DEPTH'].values if 'DEPTH' in df_after.columns else depth_before
+    
+    depth_min = min(np.nanmin(depth_before), np.nanmin(depth_after))
+    depth_max = max(np.nanmax(depth_before), np.nanmax(depth_after))
+    depth_range = depth_max - depth_min
+    
+    # Calculate figure dimensions
+    scale_ratio = settings.get('scale_ratio', 500)
+    height_cm = (depth_range * 100) / scale_ratio
+    height_in = max(6, min(18, height_cm / 2.54))
+    
+    # Create figure
+    fig = plt.figure(figsize=(10, height_in), facecolor='white')
+    
+    # GridSpec: header + 2 tracks
+    if header_info:
+        gs = gridspec.GridSpec(2, 3, figure=fig, 
+                               height_ratios=[0.08, 0.92],
+                               width_ratios=[0.6, 3.5, 3.5],
+                               wspace=0.05, hspace=0.02)
+        
+        ax_header = fig.add_subplot(gs[0, :])
+        _draw_well_header(ax_header, header_info, settings.get('depth_unit', 'm'))
+        
+        ax_depth = fig.add_subplot(gs[1, 0])
+        ax_before = fig.add_subplot(gs[1, 1], sharey=ax_depth)
+        ax_after = fig.add_subplot(gs[1, 2], sharey=ax_depth)
+    else:
+        gs = gridspec.GridSpec(1, 3, figure=fig,
+                               width_ratios=[0.6, 3.5, 3.5],
+                               wspace=0.05)
+        
+        ax_depth = fig.add_subplot(gs[0, 0])
+        ax_before = fig.add_subplot(gs[0, 1], sharey=ax_depth)
+        ax_after = fig.add_subplot(gs[0, 2], sharey=ax_depth)
+    
+    # Draw depth track
+    _draw_depth_track(ax_depth, depth_before, depth_min, depth_max, 
+                      settings.get('depth_unit', 'm'))
+    
+    # Get curve color based on type
+    curve_color = _get_curve_color(curve_name, mapping)
+    
+    # Get data range for consistent scaling
+    data_before = df_before[curve_name].values if curve_name in df_before.columns else None
+    data_after = df_after[curve_name].values if curve_name in df_after.columns else None
+    
+    if data_before is not None and data_after is not None:
+        all_data = np.concatenate([data_before[~np.isnan(data_before)], 
+                                   data_after[~np.isnan(data_after)]])
+        if len(all_data) > 0:
+            data_min = np.percentile(all_data, 1)
+            data_max = np.percentile(all_data, 99)
+            # Add 5% padding
+            padding = (data_max - data_min) * 0.05
+            data_min -= padding
+            data_max += padding
+        else:
+            data_min, data_max = 0, 100
+    else:
+        data_min, data_max = 0, 100
+    
+    # Draw BEFORE track
+    _draw_comparison_track(ax_before, df_before, curve_name, depth_before,
+                          data_min, data_max, curve_color, title_before,
+                          highlight_mask, '#ef4444', 0.3)
+    
+    # Draw AFTER track
+    _draw_comparison_track(ax_after, df_after, curve_name, depth_after,
+                          data_min, data_max, '#22c55e', title_after,
+                          None, None, None)
+    
+    # Set depth limits
+    ax_depth.set_ylim(depth_max, depth_min)
+    
+    # Hide y-axis on non-depth tracks
+    plt.setp(ax_before.get_yticklabels(), visible=False)
+    plt.setp(ax_after.get_yticklabels(), visible=False)
+    
+    plt.tight_layout()
+    return fig
+
+
+def _get_curve_color(curve_name, mapping):
+    """Get industry-standard color for a curve type."""
+    curve_upper = curve_name.upper()
+    
+    if 'GR' in curve_upper:
+        return COLORS['GR']
+    elif any(r in curve_upper for r in ['RT', 'RLLD', 'RDEP', 'ILD', 'RES']):
+        return COLORS['RES_DEEP']
+    elif any(r in curve_upper for r in ['RM', 'RLLM', 'ILM']):
+        return COLORS['RES_MED']
+    elif any(r in curve_upper for r in ['RS', 'RXOZ', 'MSFL']):
+        return COLORS['RES_SHAL']
+    elif any(r in curve_upper for r in ['RHOB', 'RHOZ', 'DEN']):
+        return COLORS['DENS']
+    elif any(r in curve_upper for r in ['NPHI', 'TNPH', 'NEU']):
+        return COLORS['NEUT']
+    else:
+        return '#3b82f6'  # Default blue
+
+
+def _draw_comparison_track(ax, df, curve_name, depth, data_min, data_max, 
+                           curve_color, title, highlight_mask=None,
+                           highlight_color=None, highlight_alpha=None):
+    """Draw a single track for before/after comparison."""
+    ax.set_facecolor(COLORS['TRACK_BG'])
+    
+    # Title with color indicator
+    ax.set_title(f"{title}\n{curve_name}", fontsize=10, fontweight='bold', 
+                pad=8, color=curve_color)
+    
+    # Set scale
+    ax.set_xlim(data_min, data_max)
+    
+    # Grid
+    ax.xaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax.yaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.xaxis.grid(True, which='minor', linestyle=':', linewidth=0.3, color=COLORS['GRID'], alpha=0.4)
+    
+    # X-axis on top
+    ax.xaxis.set_label_position('top')
+    ax.xaxis.tick_top()
+    ax.tick_params(axis='x', colors=curve_color, labelsize=7)
+    ax.spines['top'].set_color(curve_color)
+    ax.spines['top'].set_linewidth(2)
+    
+    # Border
+    for spine in ['bottom', 'left', 'right']:
+        ax.spines[spine].set_color(COLORS['BORDER'])
+        ax.spines[spine].set_linewidth(1)
+    
+    # Plot curve
+    if curve_name in df.columns:
+        data = df[curve_name].values.copy()
+        ax.plot(data, depth, color=curve_color, linewidth=1.5)
+        
+        # Highlight regions (outliers, noise, etc.)
+        if highlight_mask is not None and highlight_color:
+            highlight_depths = depth[highlight_mask]
+            highlight_values = data[highlight_mask]
+            ax.scatter(highlight_values, highlight_depths, color=highlight_color,
+                      s=8, alpha=0.7, zorder=5, label='Flagged')
+    else:
+        ax.text(0.5, 0.5, f"No {curve_name} Data", transform=ax.transAxes,
+                ha='center', va='center', fontsize=10, color='gray')
+
+
+def create_multi_file_overlay(
+    dataframes,
+    curve_name,
+    headers=None,
+    settings=None,
+    colors=None
+):
+    """
+    Create an overlay plot showing the same curve from multiple LAS files.
+    
+    Useful for pre-splicing visualization to see depth alignment issues.
+    
+    Args:
+        dataframes: List of DataFrames
+        curve_name: Curve to plot
+        headers: List of header dictionaries (optional)
+        settings: Plot settings
+        colors: List of colors (optional)
+        
+    Returns:
+        Matplotlib figure
+    """
+    if settings is None:
+        settings = {}
+    
+    if colors is None:
+        colors = ['#22d3ee', '#34d399', '#f472b6', '#fbbf24', '#a78bfa', '#fb7185']
+    
+    # Get overall depth range
+    all_depths = []
+    for df in dataframes:
+        if 'DEPTH' in df.columns:
+            all_depths.extend(df['DEPTH'].dropna().values)
+    
+    if not all_depths:
+        return None
+    
+    depth_min = min(all_depths)
+    depth_max = max(all_depths)
+    depth_range = depth_max - depth_min
+    
+    # Figure size
+    scale_ratio = settings.get('scale_ratio', 500)
+    height_cm = (depth_range * 100) / scale_ratio
+    height_in = max(6, min(18, height_cm / 2.54))
+    
+    fig = plt.figure(figsize=(8, height_in), facecolor='white')
+    
+    gs = gridspec.GridSpec(1, 2, figure=fig, width_ratios=[0.6, 4], wspace=0.05)
+    
+    ax_depth = fig.add_subplot(gs[0, 0])
+    ax_curve = fig.add_subplot(gs[0, 1], sharey=ax_depth)
+    
+    # Depth track
+    _draw_depth_track(ax_depth, np.array([depth_min, depth_max]), 
+                      depth_min, depth_max, settings.get('depth_unit', 'm'))
+    
+    # Curve track
+    ax_curve.set_facecolor(COLORS['TRACK_BG'])
+    ax_curve.set_title(f"Overlay: {curve_name}", fontsize=10, fontweight='bold', pad=8)
+    
+    # Grid
+    ax_curve.xaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax_curve.yaxis.grid(True, linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    
+    ax_curve.xaxis.set_label_position('top')
+    ax_curve.xaxis.tick_top()
+    
+    for spine in ax_curve.spines.values():
+        spine.set_color(COLORS['BORDER'])
+        spine.set_linewidth(1)
+    
+    # Plot each file
+    legend_handles = []
+    for idx, df in enumerate(dataframes):
+        if curve_name in df.columns:
+            color = colors[idx % len(colors)]
+            depth = df['DEPTH'].values
+            data = df[curve_name].values
+            
+            label = f"File {idx+1}"
+            if headers and idx < len(headers):
+                well = headers[idx].get('WELL', f'File {idx+1}')
+                label = well[:20]
+            
+            ax_curve.plot(data, depth, color=color, linewidth=1.2, label=label)
+            legend_handles.append(mpatches.Patch(color=color, label=label))
+    
+    if legend_handles:
+        ax_curve.legend(handles=legend_handles, loc='lower right', fontsize=7,
+                       framealpha=0.9, edgecolor=COLORS['BORDER'])
+    
+    ax_depth.set_ylim(depth_max, depth_min)
+    plt.setp(ax_curve.get_yticklabels(), visible=False)
+    
+    plt.tight_layout()
+    return fig
+
 
 def create_log_plot(df, mapping, settings, show_gr_fill=False, show_dn_fill=False):
     """
@@ -316,3 +1068,563 @@ def export_plot_to_bytes(fig, format='png', dpi=150):
     
     buf.seek(0)
     return buf.getvalue()
+
+
+# =============================================================================
+# TOGGLEABLE MULTI-TRACK PLOTTING
+# =============================================================================
+
+# Track definitions for toggleable plots
+TRACK_DEFINITIONS = {
+    'GR': {
+        'name': 'Gamma Ray',
+        'unit': 'gAPI',
+        'color': '#00AA00',
+        'scale': 'linear',
+        'default_min': 0,
+        'default_max': 150
+    },
+    'CALIPER': {
+        'name': 'Caliper',
+        'unit': 'in',
+        'color': '#8B4513',
+        'scale': 'linear',
+        'default_min': 6,
+        'default_max': 16
+    },
+    'SP': {
+        'name': 'Spontaneous Potential',
+        'unit': 'mV',
+        'color': '#FF6600',
+        'scale': 'linear',
+        'default_min': -100,
+        'default_max': 100
+    },
+    'RES_DEEP': {
+        'name': 'Deep Resistivity',
+        'unit': 'ohm.m',
+        'color': '#0066CC',
+        'scale': 'log',
+        'default_min': 0.2,
+        'default_max': 2000
+    },
+    'RES_MED': {
+        'name': 'Medium Resistivity',
+        'unit': 'ohm.m',
+        'color': '#CC0000',
+        'scale': 'log',
+        'default_min': 0.2,
+        'default_max': 2000
+    },
+    'RES_SHAL': {
+        'name': 'Shallow Resistivity',
+        'unit': 'ohm.m',
+        'color': '#FF8C00',
+        'scale': 'log',
+        'default_min': 0.2,
+        'default_max': 2000
+    },
+    'DENS': {
+        'name': 'Density',
+        'unit': 'g/cc',
+        'color': '#CC0000',
+        'scale': 'linear',
+        'default_min': 1.95,
+        'default_max': 2.95
+    },
+    'NEUT': {
+        'name': 'Neutron Porosity',
+        'unit': 'v/v',
+        'color': '#0066CC',
+        'scale': 'linear',
+        'default_min': -0.15,
+        'default_max': 0.45
+    },
+    'SONIC': {
+        'name': 'Sonic',
+        'unit': 'us/ft',
+        'color': '#9900CC',
+        'scale': 'linear',
+        'default_min': 40,
+        'default_max': 140
+    },
+    'PEF': {
+        'name': 'Photoelectric Factor',
+        'unit': 'b/e',
+        'color': '#00CCCC',
+        'scale': 'linear',
+        'default_min': 0,
+        'default_max': 10
+    }
+}
+
+
+def create_toggleable_log_plot(
+    df,
+    mapping,
+    track_visibility,
+    settings=None,
+    highlight_mask=None,
+    highlight_color='red',
+    highlight_alpha=0.3,
+    title=None
+):
+    """
+    Create a multi-track log plot with user-controlled track visibility.
+    
+    Args:
+        df: DataFrame with log data (must include 'DEPTH' column)
+        mapping: Curve mapping dictionary (curve_type -> column_name)
+        track_visibility: Dictionary of track_type -> bool (visible/hidden)
+        settings: Optional plot settings (limits, scales, etc.)
+        highlight_mask: Optional boolean mask to highlight data points
+        highlight_color: Color for highlighted regions
+        highlight_alpha: Alpha for highlighted regions
+        title: Optional main title for the plot
+        
+    Returns:
+        Matplotlib figure
+    """
+    if settings is None:
+        settings = {}
+    
+    # Determine visible tracks
+    visible_tracks = [t for t in TRACK_DEFINITIONS.keys() 
+                      if track_visibility.get(t, False) and 
+                      mapping.get(t) and 
+                      mapping.get(t) in df.columns]
+    
+    if not visible_tracks:
+        # Return empty figure with message
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.text(0.5, 0.5, "No tracks selected or no data available", 
+                ha='center', va='center', fontsize=12, color='gray')
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return fig
+    
+    # Calculate figure dimensions
+    depth = df['DEPTH'].values
+    depth_min = df['DEPTH'].min()
+    depth_max = df['DEPTH'].max()
+    depth_range = depth_max - depth_min
+    
+    scale_ratio = settings.get('scale_ratio', 500)
+    height_cm = (depth_range * 100) / scale_ratio
+    height_in = max(6, min(30, height_cm / 2.54))
+    
+    track_width = 3.5
+    fig_width = track_width * len(visible_tracks) + 1.5
+    
+    # Create figure
+    fig, axes = plt.subplots(
+        nrows=1, 
+        ncols=len(visible_tracks), 
+        figsize=(fig_width, height_in),
+        sharey=True
+    )
+    
+    # Handle single track case
+    if len(visible_tracks) == 1:
+        axes = [axes]
+    
+    fig.patch.set_facecolor('white')
+    plt.subplots_adjust(wspace=0.05, top=0.93, bottom=0.03, left=0.1, right=0.98)
+    
+    if title:
+        fig.suptitle(title, fontsize=12, fontweight='bold', y=0.98)
+    
+    # Plot each visible track
+    for i, track_type in enumerate(visible_tracks):
+        ax = axes[i]
+        track_def = TRACK_DEFINITIONS[track_type]
+        curve_name = mapping[track_type]
+        curve_data = df[curve_name].values
+        
+        # Apply common styling
+        ax.set_facecolor(COLORS['TRACK_BG'])
+        ax.grid(True, which='major', linestyle='-', linewidth=0.5, 
+                color=COLORS['GRID'], alpha=0.7)
+        ax.grid(True, which='minor', linestyle=':', linewidth=0.3, 
+                color=COLORS['GRID'], alpha=0.4)
+        
+        for spine in ax.spines.values():
+            spine.set_color(COLORS['BORDER'])
+            spine.set_linewidth(1)
+        
+        # Track header
+        ax.set_title(track_def['name'], fontsize=10, fontweight='bold', pad=10)
+        
+        # Get limits from settings or use defaults
+        limit_key_min = f"{track_type.lower()}_min"
+        limit_key_max = f"{track_type.lower()}_max"
+        x_min = settings.get(limit_key_min, track_def['default_min'])
+        x_max = settings.get(limit_key_max, track_def['default_max'])
+        
+        # Apply scale type
+        if track_def['scale'] == 'log':
+            ax.set_xscale('log')
+            ax.xaxis.set_major_locator(LogLocator(base=10, numticks=10))
+        
+        ax.set_xlim(x_min, x_max)
+        
+        # X-axis styling
+        color = settings.get(f"{track_type.lower()}_color", track_def['color'])
+        ax.set_xlabel(f"{track_def['unit']}", fontsize=9, color=color, fontweight='bold')
+        ax.tick_params(axis='x', colors=color, labelsize=8)
+        ax.xaxis.set_label_position('top')
+        ax.xaxis.tick_top()
+        ax.spines['top'].set_color(color)
+        ax.spines['top'].set_linewidth(2)
+        
+        # Plot the curve
+        line_style = settings.get(f"{track_type.lower()}_linestyle", '-')
+        line_width = settings.get(f"{track_type.lower()}_linewidth", 1.5)
+        ax.plot(curve_data, depth, color=color, linewidth=line_width, 
+                linestyle=line_style, label=curve_name)
+        
+        # Add highlight regions if provided
+        if highlight_mask is not None and len(highlight_mask) == len(df):
+            _add_highlight_regions(ax, depth, highlight_mask, 
+                                   highlight_color, highlight_alpha, x_min, x_max)
+        
+        # Only show y-axis on first track
+        if i == 0:
+            ax.set_ylabel("Depth (m)", fontsize=10, fontweight='bold')
+        
+        ax.tick_params(axis='y', labelsize=8)
+    
+    # Set y-axis limits (inverted for depth)
+    axes[0].set_ylim(depth_max, depth_min)
+    
+    fig.tight_layout()
+    return fig
+
+
+def _add_highlight_regions(ax, depth, mask, color, alpha, x_min, x_max):
+    """Add highlighted regions to a track based on a boolean mask."""
+    # Find contiguous regions
+    changes = np.diff(mask.astype(int))
+    starts = np.where(changes == 1)[0] + 1
+    ends = np.where(changes == -1)[0] + 1
+    
+    # Handle edge cases
+    if mask[0]:
+        starts = np.concatenate([[0], starts])
+    if mask[-1]:
+        ends = np.concatenate([ends, [len(mask)]])
+    
+    # Draw shaded rectangles for each region
+    for start, end in zip(starts, ends):
+        if start < len(depth) and end <= len(depth):
+            d_start = depth[start]
+            d_end = depth[min(end, len(depth)-1)]
+            ax.axhspan(d_start, d_end, alpha=alpha, color=color, zorder=0)
+
+
+def create_comparison_log_plot(
+    df_before,
+    df_after,
+    curve_name,
+    depth_col='DEPTH',
+    title="Before/After Comparison",
+    before_label="Original",
+    after_label="Processed",
+    settings=None
+):
+    """
+    Create a side-by-side comparison plot for before/after analysis.
+    
+    Args:
+        df_before: DataFrame with original data
+        df_after: DataFrame with processed data
+        curve_name: Name of the curve column to compare
+        depth_col: Name of depth column
+        title: Plot title
+        before_label: Label for original data
+        after_label: Label for processed data
+        settings: Optional plot settings
+        
+    Returns:
+        Matplotlib figure
+    """
+    if settings is None:
+        settings = {}
+    
+    # Get data
+    depth_before = df_before[depth_col].values
+    depth_after = df_after[depth_col].values
+    signal_before = df_before[curve_name].values if curve_name in df_before.columns else None
+    signal_after = df_after[curve_name].values if curve_name in df_after.columns else None
+    
+    if signal_before is None and signal_after is None:
+        fig, ax = plt.subplots(figsize=(6, 4))
+        ax.text(0.5, 0.5, f"Curve '{curve_name}' not found", 
+                ha='center', va='center', fontsize=12, color='gray')
+        return fig
+    
+    # Calculate dimensions
+    all_depths = np.concatenate([depth_before, depth_after])
+    depth_min = np.nanmin(all_depths)
+    depth_max = np.nanmax(all_depths)
+    depth_range = depth_max - depth_min
+    
+    scale_ratio = settings.get('scale_ratio', 500)
+    height_in = max(6, min(20, (depth_range * 100) / scale_ratio / 2.54))
+    
+    # Create side-by-side figure
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, height_in), sharey=True)
+    fig.suptitle(title, fontsize=12, fontweight='bold')
+    
+    # Common styling
+    for ax in [ax1, ax2]:
+        ax.set_facecolor(COLORS['TRACK_BG'])
+        ax.grid(True, which='major', linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+        for spine in ax.spines.values():
+            spine.set_color(COLORS['BORDER'])
+            spine.set_linewidth(1)
+    
+    # Calculate common x limits
+    all_values = []
+    if signal_before is not None:
+        all_values.extend(signal_before[~np.isnan(signal_before)])
+    if signal_after is not None:
+        all_values.extend(signal_after[~np.isnan(signal_after)])
+    
+    if all_values:
+        x_min = np.percentile(all_values, 1)
+        x_max = np.percentile(all_values, 99)
+        margin = (x_max - x_min) * 0.1
+        x_min -= margin
+        x_max += margin
+    else:
+        x_min, x_max = 0, 1
+    
+    # Plot before
+    ax1.set_title(before_label, fontsize=10, fontweight='bold', pad=10)
+    ax1.set_xlim(x_min, x_max)
+    ax1.set_xlabel(curve_name, fontsize=9, fontweight='bold')
+    ax1.xaxis.set_label_position('top')
+    ax1.xaxis.tick_top()
+    ax1.set_ylabel("Depth (m)", fontsize=10, fontweight='bold')
+    
+    if signal_before is not None:
+        ax1.plot(signal_before, depth_before, color='#333333', linewidth=1.5)
+    
+    # Plot after
+    ax2.set_title(after_label, fontsize=10, fontweight='bold', pad=10)
+    ax2.set_xlim(x_min, x_max)
+    ax2.set_xlabel(curve_name, fontsize=9, fontweight='bold')
+    ax2.xaxis.set_label_position('top')
+    ax2.xaxis.tick_top()
+    
+    if signal_after is not None:
+        ax2.plot(signal_after, depth_after, color='#00AA00', linewidth=1.5)
+    
+    # Set y limits
+    ax1.set_ylim(depth_max, depth_min)
+    
+    plt.tight_layout()
+    return fig
+
+
+def create_single_curve_plot(
+    df,
+    curve_name,
+    depth_col='DEPTH',
+    title=None,
+    color='#0066CC',
+    settings=None,
+    highlight_mask=None,
+    highlight_color='red',
+    highlight_alpha=0.3,
+    annotation_depths=None,
+    annotation_labels=None
+):
+    """
+    Create a single curve vertical log plot.
+    
+    Args:
+        df: DataFrame with data
+        curve_name: Column name to plot
+        depth_col: Name of depth column
+        title: Optional plot title
+        color: Curve color
+        settings: Optional settings dict
+        highlight_mask: Optional boolean mask for highlighting
+        highlight_color: Color for highlights
+        highlight_alpha: Alpha for highlights
+        annotation_depths: List of depths for annotations
+        annotation_labels: List of labels for annotations
+        
+    Returns:
+        Matplotlib figure
+    """
+    if settings is None:
+        settings = {}
+    
+    if curve_name not in df.columns:
+        fig, ax = plt.subplots(figsize=(4, 6))
+        ax.text(0.5, 0.5, f"Curve '{curve_name}' not found", 
+                ha='center', va='center', fontsize=12, color='gray')
+        return fig
+    
+    depth = df[depth_col].values
+    signal = df[curve_name].values
+    
+    depth_min = np.nanmin(depth)
+    depth_max = np.nanmax(depth)
+    depth_range = depth_max - depth_min
+    
+    scale_ratio = settings.get('scale_ratio', 500)
+    height_in = max(6, min(20, (depth_range * 100) / scale_ratio / 2.54))
+    
+    fig, ax = plt.subplots(figsize=(5, height_in))
+    fig.patch.set_facecolor('white')
+    
+    # Styling
+    ax.set_facecolor(COLORS['TRACK_BG'])
+    ax.grid(True, which='major', linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    ax.grid(True, which='minor', linestyle=':', linewidth=0.3, color=COLORS['GRID'], alpha=0.4)
+    
+    for spine in ax.spines.values():
+        spine.set_color(COLORS['BORDER'])
+        spine.set_linewidth(1)
+    
+    # Title
+    if title:
+        ax.set_title(title, fontsize=11, fontweight='bold', pad=10)
+    else:
+        ax.set_title(curve_name, fontsize=11, fontweight='bold', pad=10)
+    
+    # X limits
+    valid_signal = signal[~np.isnan(signal)]
+    if len(valid_signal) > 0:
+        x_min = settings.get('x_min', np.percentile(valid_signal, 1))
+        x_max = settings.get('x_max', np.percentile(valid_signal, 99))
+        margin = (x_max - x_min) * 0.1
+        x_min -= margin
+        x_max += margin
+    else:
+        x_min, x_max = 0, 1
+    
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(depth_max, depth_min)
+    
+    ax.xaxis.set_label_position('top')
+    ax.xaxis.tick_top()
+    ax.spines['top'].set_color(color)
+    ax.spines['top'].set_linewidth(2)
+    ax.tick_params(axis='x', colors=color, labelsize=8)
+    ax.set_ylabel("Depth (m)", fontsize=10, fontweight='bold')
+    
+    # Plot curve
+    ax.plot(signal, depth, color=color, linewidth=1.5)
+    
+    # Highlight regions
+    if highlight_mask is not None and len(highlight_mask) == len(df):
+        _add_highlight_regions(ax, depth, highlight_mask, 
+                               highlight_color, highlight_alpha, x_min, x_max)
+    
+    # Annotations
+    if annotation_depths is not None and annotation_labels is not None:
+        for d, label in zip(annotation_depths, annotation_labels):
+            ax.axhline(y=d, color='orange', linestyle='--', linewidth=1, alpha=0.7)
+            ax.annotate(label, xy=(x_max, d), fontsize=8, color='orange',
+                       va='center', ha='right')
+    
+    plt.tight_layout()
+    return fig
+
+
+def create_overlay_plot(
+    df,
+    curve_names,
+    depth_col='DEPTH',
+    title="Curve Overlay",
+    colors=None,
+    settings=None,
+    normalize=False
+):
+    """
+    Create an overlay plot with multiple curves on the same track.
+    
+    Useful for comparing curves or showing before/after on same axis.
+    
+    Args:
+        df: DataFrame with data
+        curve_names: List of column names to plot
+        depth_col: Name of depth column
+        title: Plot title
+        colors: List of colors (auto-generated if None)
+        settings: Optional settings dict
+        normalize: If True, normalize all curves to 0-1 range
+        
+    Returns:
+        Matplotlib figure
+    """
+    if settings is None:
+        settings = {}
+    
+    if colors is None:
+        default_colors = ['#0066CC', '#CC0000', '#00AA00', '#FF8C00', '#9900CC', '#00CCCC']
+        colors = [default_colors[i % len(default_colors)] for i in range(len(curve_names))]
+    
+    # Validate curves
+    valid_curves = [c for c in curve_names if c in df.columns]
+    if not valid_curves:
+        fig, ax = plt.subplots(figsize=(5, 6))
+        ax.text(0.5, 0.5, "No valid curves found", 
+                ha='center', va='center', fontsize=12, color='gray')
+        return fig
+    
+    depth = df[depth_col].values
+    depth_min = np.nanmin(depth)
+    depth_max = np.nanmax(depth)
+    depth_range = depth_max - depth_min
+    
+    scale_ratio = settings.get('scale_ratio', 500)
+    height_in = max(6, min(20, (depth_range * 100) / scale_ratio / 2.54))
+    
+    fig, ax = plt.subplots(figsize=(6, height_in))
+    fig.patch.set_facecolor('white')
+    
+    # Styling
+    ax.set_facecolor(COLORS['TRACK_BG'])
+    ax.grid(True, which='major', linestyle='-', linewidth=0.5, color=COLORS['GRID'], alpha=0.7)
+    
+    for spine in ax.spines.values():
+        spine.set_color(COLORS['BORDER'])
+        spine.set_linewidth(1)
+    
+    ax.set_title(title, fontsize=11, fontweight='bold', pad=10)
+    
+    # Plot each curve
+    handles = []
+    for i, curve_name in enumerate(valid_curves):
+        signal = df[curve_name].values.copy()
+        
+        if normalize:
+            valid_vals = signal[~np.isnan(signal)]
+            if len(valid_vals) > 0:
+                min_val, max_val = np.nanmin(valid_vals), np.nanmax(valid_vals)
+                if max_val - min_val > 0:
+                    signal = (signal - min_val) / (max_val - min_val)
+        
+        color = colors[i] if i < len(colors) else colors[-1]
+        line, = ax.plot(signal, depth, color=color, linewidth=1.5, label=curve_name)
+        handles.append(line)
+    
+    ax.set_ylim(depth_max, depth_min)
+    ax.xaxis.set_label_position('top')
+    ax.xaxis.tick_top()
+    ax.set_ylabel("Depth (m)", fontsize=10, fontweight='bold')
+    
+    if normalize:
+        ax.set_xlabel("Normalized Value", fontsize=9, fontweight='bold')
+        ax.set_xlim(-0.1, 1.1)
+    
+    ax.legend(handles=handles, loc='upper right', fontsize=8, framealpha=0.9)
+    
+    plt.tight_layout()
+    return fig
