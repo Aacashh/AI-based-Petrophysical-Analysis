@@ -1383,77 +1383,120 @@ elif upload_mode == "Multiple LAS Files" and multi_files and len(multi_files) >=
         ])
         
         # =================================================================
-        # TAB 3: LOG SPLICING (multi-file mode)
+        # TAB 3: LOG SPLICING (multi-file mode) - ML-Based Workflow
         # =================================================================
         with tab3:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">🔗 Log Splicing & Concatenation</div>
+                <div class="feature-title">🔗 ML-Based Log Splicing</div>
                 <div class="feature-desc">
-                    Combine multiple log runs into continuous curves using cross-correlation 
-                    for global alignment and Dynamic Time Warping (DTW) for elastic correction.
+                    Combine multiple log runs using an ML-enhanced workflow: Hampel filter for QC,
+                    rolling variance for stability detection, PELT for optimal splice point detection,
+                    and weighted blending for smooth transitions.
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
-            from shared.splicing import (
-                splice_logs, find_common_curves, get_recommended_correlation_curve,
-                find_overlap_region, DEFAULT_GRID_STEP, DEFAULT_SEARCH_WINDOW, DEFAULT_DTW_WINDOW
+            from shared.ml_splicing import (
+                ml_splice_logs, find_common_curves, get_recommended_correlation_curve,
+                find_overlap_region, DEFAULT_GRID_STEP, DEFAULT_HAMPEL_WINDOW,
+                DEFAULT_HAMPEL_THRESHOLD, DEFAULT_VARIANCE_WINDOW, DEFAULT_BLEND_ZONE
             )
             from plotting import create_overlay_plot
             
             # Splicing parameters
-            st.markdown("### ⚙️ Splicing Parameters")
+            st.markdown("### ⚙️ ML Splicing Parameters")
             
-            sp_col1, sp_col2, sp_col3 = st.columns(3)
+            sp_col1, sp_col2 = st.columns(2)
             
             with sp_col1:
                 correlation_curve = st.selectbox(
                     "Correlation Curve",
                     options=common_curves,
                     index=common_curves.index('GR') if 'GR' in common_curves else 0,
-                    help="Curve to use for alignment"
+                    help="Curve to use for splicing alignment"
+                )
+                
+                grid_step = st.selectbox(
+                    "Grid Resolution",
+                    options=[0.0762, 0.1524, 0.3048],
+                    index=1,
+                    format_func=lambda x: f"{x:.4f} m ({x/0.3048:.2f} ft)"
                 )
             
             with sp_col2:
-                max_search = st.slider(
-                    "Max Search Window (m)",
-                    min_value=5.0, max_value=50.0, value=DEFAULT_SEARCH_WINDOW
+                blend_zone = st.slider(
+                    "Blend Zone Width (m)",
+                    min_value=1.0, max_value=10.0, value=DEFAULT_BLEND_ZONE,
+                    help="Width of transition zone for smooth blending"
+                )
+                
+                use_pelt = st.checkbox(
+                    "Use PELT Change Point Detection",
+                    value=True,
+                    help="Use PELT algorithm to find optimal splice points"
                 )
             
-            with sp_col3:
-                max_elastic = st.slider(
-                    "Max Elastic Stretch (m)",
-                    min_value=1.0, max_value=20.0, value=DEFAULT_DTW_WINDOW
-                )
-            
-            grid_step = st.selectbox(
-                "Grid Resolution",
-                options=[0.0762, 0.1524, 0.3048],
-                index=1,
-                format_func=lambda x: f"{x:.4f} m"
-            )
+            # Advanced QC parameters
+            with st.expander("🔧 Advanced QC Parameters", expanded=False):
+                qc_col1, qc_col2 = st.columns(2)
+                
+                with qc_col1:
+                    hampel_window = st.slider(
+                        "Hampel Filter Window",
+                        min_value=3, max_value=21, value=DEFAULT_HAMPEL_WINDOW, step=2,
+                        help="Window size for spike detection (must be odd)"
+                    )
+                    hampel_threshold = st.slider(
+                        "Hampel Threshold (MAD units)",
+                        min_value=1.0, max_value=5.0, value=DEFAULT_HAMPEL_THRESHOLD,
+                        help="Threshold for spike detection (higher = less sensitive)"
+                    )
+                
+                with qc_col2:
+                    variance_window = st.slider(
+                        "Variance Window",
+                        min_value=5, max_value=51, value=DEFAULT_VARIANCE_WINDOW, step=2,
+                        help="Window size for rolling variance calculation"
+                    )
             
             # Algorithm explanation
-            with st.expander("📐 How Splicing Works", expanded=False):
+            with st.expander("📐 ML Splicing Workflow", expanded=False):
                 st.markdown("""
                 <div class="algorithm-box">
-                <strong>Two-Stage Alignment Process:</strong><br><br>
+                <strong>7-Step ML-Based Splicing Pipeline:</strong><br><br>
                 
-                <strong>Stage 1: Cross-Correlation (Global Shift)</strong><br>
-                • Finds the bulk depth shift that maximizes correlation<br>
-                • Formula: <code>shift = argmax(∑ ref[i] × target[i + shift])</code><br><br>
+                <strong>1. Overlap Detection</strong> (Rule-based logic)<br>
+                • Identifies common depth region between log runs<br><br>
                 
-                <strong>Stage 2: Dynamic Time Warping (Elastic Correction)</strong><br>
-                • Handles non-linear stretching/compression<br>
-                • Uses constrained DTW with Sakoe-Chiba band<br>
-                • Allows local depth adjustments within the elastic window
+                <strong>2. Resampling</strong> (Linear interpolation)<br>
+                • Aligns both logs to a common depth grid<br><br>
+                
+                <strong>3. QC - Hampel Filter</strong> (Remove spikes)<br>
+                • Robust outlier detection using Median Absolute Deviation<br>
+                • Formula: <code>spike if |x - median| > threshold × MAD × 1.4826</code><br><br>
+                
+                <strong>4. Stability Metric</strong> (Rolling variance)<br>
+                • Detects noisy/unstable zones in each log<br>
+                • Lower variance = more trustworthy data<br><br>
+                
+                <strong>5. Splice Point Detection</strong> (CPD-PELT)<br>
+                • Change Point Detection using PELT algorithm<br>
+                • Finds natural transition points in the signal<br><br>
+                
+                <strong>6. Run Selection</strong> (Trust scoring)<br>
+                • Calculates confidence scores for each log run<br>
+                • Based on stability, coverage, and consistency<br><br>
+                
+                <strong>7. Transition</strong> (Weighted blending)<br>
+                • Smooth sigmoid-based transition between logs<br>
+                • Trust-weighted blending in the transition zone
                 </div>
                 """, unsafe_allow_html=True)
             
             # Run splicing
-            if st.button("🔗 Run Log Splicing", type="primary", key="run_splice"):
-                with st.spinner("Splicing logs..."):
+            if st.button("🔗 Run ML Splicing", type="primary", key="run_splice"):
+                with st.spinner("Running ML-based splicing pipeline..."):
                     try:
                         # Sort by depth (shallowest first)
                         sorted_indices = sorted(
@@ -1463,56 +1506,101 @@ elif upload_mode == "Multiple LAS Files" and multi_files and len(multi_files) >=
                         
                         sorted_dfs = [dataframes[i] for i in sorted_indices]
                         
+                        # Progress tracking
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        
                         # Splice pairs sequentially
                         current_depth = sorted_dfs[0]['DEPTH'].values
                         current_signal = sorted_dfs[0][correlation_curve].values
                         
                         splice_results = []
                         
+                        def update_progress(step, msg):
+                            status_text.text(f"[{step.upper()}] {msg}")
+                        
                         for i in range(1, len(sorted_dfs)):
+                            progress_bar.progress(int((i / len(sorted_dfs)) * 100))
+                            
                             target_depth = sorted_dfs[i]['DEPTH'].values
                             target_signal = sorted_dfs[i][correlation_curve].values
                             
-                            st.info(f"Splicing file {i} into composite...")
+                            st.info(f"🔄 Splicing Run {i+1} into composite...")
                             
-                            result = splice_logs(
-                                current_depth, current_signal,
-                                target_depth, target_signal,
+                            result = ml_splice_logs(
+                                shallow_depth=current_depth,
+                                shallow_signal=current_signal,
+                                deep_depth=target_depth,
+                                deep_signal=target_signal,
                                 grid_step=grid_step,
-                                max_search_meters=max_search,
-                                max_elastic_meters=max_elastic
+                                hampel_window=hampel_window,
+                                hampel_threshold=hampel_threshold,
+                                variance_window=variance_window,
+                                blend_zone=blend_zone,
+                                use_pelt=use_pelt,
+                                progress_callback=update_progress
                             )
                             
                             splice_results.append(result)
                             current_depth = result.merged_depth
                             current_signal = result.merged_signal
                         
+                        progress_bar.progress(100)
+                        status_text.text("✅ Splicing complete!")
+                        
                         st.session_state['splice_results'] = splice_results
                         st.session_state['spliced_depth'] = current_depth
                         st.session_state['spliced_signal'] = current_signal
                         
                         # Display results
-                        st.markdown('<div class="feature-header">📊 Splicing Results</div>', unsafe_allow_html=True)
+                        st.markdown('<div class="feature-header">📊 ML Splicing Results</div>', unsafe_allow_html=True)
                         
                         for i, result in enumerate(splice_results):
                             st.markdown(f"**Splice {i+1}:**")
                             
+                            # Row 1: Main metrics
                             m1, m2, m3, m4 = st.columns(4)
                             
                             with m1:
-                                st.metric("Global Shift", f"{result.bulk_shift_meters:.2f} m")
+                                st.metric("Splice Point", f"{result.splice_point:.1f} m")
                             
                             with m2:
-                                st.metric("DTW Cost", f"{result.dtw_cost:.3f}")
+                                quality_pct = int(result.splice_quality_score * 100)
+                                st.metric("Quality Score", f"{quality_pct}%")
                             
                             with m3:
                                 st.metric("Overlap", f"{result.overlap_start:.1f}-{result.overlap_end:.1f} m")
                             
                             with m4:
-                                st.metric("Splice Point", f"{result.splice_point:.1f} m")
+                                st.metric("Blend Zone", f"{result.blend_start:.1f}-{result.blend_end:.1f} m")
+                            
+                            # Row 2: Trust and stability
+                            t1, t2, t3, t4 = st.columns(4)
+                            
+                            with t1:
+                                trust_shallow_pct = int(result.trust_shallow * 100)
+                                st.metric("Shallow Trust", f"{trust_shallow_pct}%")
+                            
+                            with t2:
+                                trust_deep_pct = int(result.trust_deep * 100)
+                                st.metric("Deep Trust", f"{trust_deep_pct}%")
+                            
+                            with t3:
+                                stab_shallow_pct = int(result.shallow_stability * 100)
+                                st.metric("Shallow Stability", f"{stab_shallow_pct}%")
+                            
+                            with t4:
+                                stab_deep_pct = int(result.deep_stability * 100)
+                                st.metric("Deep Stability", f"{stab_deep_pct}%")
+                            
+                            # Show change points if detected
+                            if result.change_points:
+                                st.caption(f"📍 Detected change points: {', '.join([f'{cp:.1f}m' for cp in result.change_points])}")
+                            
+                            st.divider()
                         
                         # Before/After Visualization - Professional Industry Standard
-                        st.markdown("### 📈 Before / After Comparison (Industry Standard Display)")
+                        st.markdown("### 📈 Before / After Comparison")
                         
                         from plotting import COLORS, STANDARD_RANGES
                         from matplotlib.ticker import AutoMinorLocator
@@ -1524,18 +1612,18 @@ elif upload_mode == "Multiple LAS Files" and multi_files and len(multi_files) >=
                         height_in = min(14, max(8, depth_range / 80))
                         
                         # Create professional figure with header
-                        fig = plt.figure(figsize=(12, height_in), facecolor='white')
+                        fig = plt.figure(figsize=(14, height_in), facecolor='white')
                         
-                        gs = gridspec.GridSpec(2, 4, figure=fig,
+                        gs = gridspec.GridSpec(2, 5, figure=fig,
                                              height_ratios=[0.06, 0.94],
-                                             width_ratios=[0.5, 3, 0.3, 3],
+                                             width_ratios=[0.4, 2.5, 0.2, 2.5, 0.8],
                                              wspace=0.02, hspace=0.02)
                         
                         # Header
                         ax_header = fig.add_subplot(gs[0, :])
                         ax_header.set_facecolor(COLORS['HEADER_BG'])
                         ax_header.axis('off')
-                        ax_header.text(0.5, 0.5, f"Log Splicing Results - {selected_well} - {correlation_curve}",
+                        ax_header.text(0.5, 0.5, f"ML Log Splicing Results - {selected_well} - {correlation_curve}",
                                       fontsize=12, fontweight='bold', ha='center', va='center')
                         
                         # Depth track
@@ -1551,7 +1639,7 @@ elif upload_mode == "Multiple LAS Files" and multi_files and len(multi_files) >=
                         # Before track
                         ax_before = fig.add_subplot(gs[1, 1], sharey=ax_depth)
                         ax_before.set_facecolor(COLORS['TRACK_BG'])
-                        ax_before.set_title("BEFORE\n(Original Segments)", fontsize=10, fontweight='bold', pad=8)
+                        ax_before.set_title("BEFORE\n(Original Runs)", fontsize=10, fontweight='bold', pad=8)
                         
                         # Plot original segments with different colors
                         segment_colors = ['#0066CC', '#CC0000', '#00AA00', '#FF8C00', '#9933FF']
@@ -1570,27 +1658,38 @@ elif upload_mode == "Multiple LAS Files" and multi_files and len(multi_files) >=
                         for spine in ax_before.spines.values():
                             spine.set_color(COLORS['BORDER'])
                         
-                        # Spacer
+                        # Spacer with arrow
                         ax_spacer = fig.add_subplot(gs[1, 2])
                         ax_spacer.axis('off')
                         ax_spacer.text(0.5, 0.5, '→', fontsize=20, ha='center', va='center', color='#666')
                         
-                        # After track
+                        # After track (spliced result)
                         ax_after = fig.add_subplot(gs[1, 3], sharey=ax_depth)
                         ax_after.set_facecolor(COLORS['TRACK_BG'])
-                        ax_after.set_title("AFTER\n(Spliced Composite)", fontsize=10, fontweight='bold', 
+                        ax_after.set_title("AFTER\n(ML Spliced)", fontsize=10, fontweight='bold', 
                                           pad=8, color='#00AA00')
                         
                         # Plot spliced result
                         ax_after.plot(current_signal, current_depth, color='#00AA00', linewidth=1.5)
                         
-                        # Mark splice points with clear indicators
+                        # Mark splice points and blend zones
                         for i, result in enumerate(splice_results):
+                            # Blend zone shading
+                            ax_after.axhspan(result.blend_start, result.blend_end, 
+                                           alpha=0.2, color='#FFD700', zorder=0)
+                            
+                            # Splice point line
                             ax_after.axhline(y=result.splice_point, color='#FF8C00', 
-                                           linestyle='--', linewidth=1.5, alpha=0.8)
+                                           linestyle='--', linewidth=2, alpha=0.9)
                             ax_after.text(ax_after.get_xlim()[1] * 0.95, result.splice_point,
-                                        f'SP{i+1}', fontsize=7, ha='right', va='bottom',
-                                        color='#FF8C00', fontweight='bold')
+                                        f'SP{i+1}', fontsize=8, ha='right', va='bottom',
+                                        color='#FF8C00', fontweight='bold',
+                                        bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.8))
+                            
+                            # Change points
+                            for cp in result.change_points:
+                                ax_after.axhline(y=cp, color='#9933FF', 
+                                               linestyle=':', linewidth=1, alpha=0.6)
                         
                         ax_after.xaxis.set_label_position('top')
                         ax_after.xaxis.tick_top()
@@ -1603,25 +1702,109 @@ elif upload_mode == "Multiple LAS Files" and multi_files and len(multi_files) >=
                         for spine in ['bottom', 'left', 'right']:
                             ax_after.spines[spine].set_color(COLORS['BORDER'])
                         
+                        # Quality track (showing trust/stability)
+                        ax_quality = fig.add_subplot(gs[1, 4], sharey=ax_depth)
+                        ax_quality.set_facecolor('#f0f0f0')
+                        ax_quality.set_title("Quality\nMetrics", fontsize=9, fontweight='bold', pad=8)
+                        
+                        # Create quality visualization
+                        for i, result in enumerate(splice_results):
+                            # Draw quality bars in overlap region
+                            overlap_mid = (result.overlap_start + result.overlap_end) / 2
+                            bar_height = result.overlap_end - result.overlap_start
+                            
+                            # Shallow trust (left bar)
+                            ax_quality.barh(overlap_mid, result.trust_shallow * 0.4, 
+                                          height=bar_height * 0.4, left=0,
+                                          color='#0066CC', alpha=0.7, label='Shallow' if i == 0 else '')
+                            
+                            # Deep trust (right bar)
+                            ax_quality.barh(overlap_mid, result.trust_deep * 0.4, 
+                                          height=bar_height * 0.4, left=0.5,
+                                          color='#CC0000', alpha=0.7, label='Deep' if i == 0 else '')
+                        
+                        ax_quality.set_xlim(0, 1)
+                        ax_quality.set_xticks([0.2, 0.7])
+                        ax_quality.set_xticklabels(['S', 'D'], fontsize=8)
+                        ax_quality.xaxis.set_label_position('top')
+                        ax_quality.xaxis.tick_top()
+                        plt.setp(ax_quality.get_yticklabels(), visible=False)
+                        for spine in ax_quality.spines.values():
+                            spine.set_color(COLORS['BORDER'])
+                        
                         plt.tight_layout()
                         st.pyplot(fig)
                         plt.close(fig)
                         
+                        # Legend explanation
+                        st.caption("""
+                        **Legend:** 🟠 Dashed line = Splice point | 🟡 Yellow zone = Blend transition | 
+                        🟣 Dotted lines = Detected change points | Quality bars: S=Shallow trust, D=Deep trust
+                        """)
+                        
                         # Export option
                         st.markdown("### 📤 Export")
-                        if st.button("💾 Export Spliced Data"):
-                            spliced_df = pd.DataFrame({
-                                'DEPTH': current_depth,
-                                correlation_curve: current_signal
-                            })
-                            
-                            csv = spliced_df.to_csv(index=False)
-                            st.download_button(
-                                "Download CSV",
-                                csv,
-                                "spliced_log.csv",
-                                "text/csv"
-                            )
+                        export_col1, export_col2 = st.columns(2)
+                        
+                        with export_col1:
+                            if st.button("💾 Export Spliced Data", key="export_splice_csv"):
+                                spliced_df = pd.DataFrame({
+                                    'DEPTH': current_depth,
+                                    correlation_curve: current_signal
+                                })
+                                
+                                csv = spliced_df.to_csv(index=False)
+                                st.download_button(
+                                    "📥 Download CSV",
+                                    csv,
+                                    "ml_spliced_log.csv",
+                                    "text/csv",
+                                    key="download_splice_csv"
+                                )
+                        
+                        with export_col2:
+                            if st.button("📋 Export Splice Report", key="export_splice_report"):
+                                # Create detailed report
+                                report_lines = [
+                                    "ML Log Splicing Report",
+                                    "=" * 50,
+                                    f"Well: {selected_well}",
+                                    f"Curve: {correlation_curve}",
+                                    f"Grid Step: {grid_step} m",
+                                    f"Blend Zone: {blend_zone} m",
+                                    "",
+                                    "Pipeline Parameters:",
+                                    f"  - Hampel Window: {hampel_window}",
+                                    f"  - Hampel Threshold: {hampel_threshold}",
+                                    f"  - Variance Window: {variance_window}",
+                                    f"  - PELT Enabled: {use_pelt}",
+                                    "",
+                                    "Splice Results:",
+                                    "-" * 50,
+                                ]
+                                
+                                for i, result in enumerate(splice_results):
+                                    report_lines.extend([
+                                        f"\nSplice {i+1}:",
+                                        f"  Splice Point: {result.splice_point:.2f} m",
+                                        f"  Quality Score: {result.splice_quality_score:.3f}",
+                                        f"  Overlap: {result.overlap_start:.2f} - {result.overlap_end:.2f} m",
+                                        f"  Blend Zone: {result.blend_start:.2f} - {result.blend_end:.2f} m",
+                                        f"  Shallow Trust: {result.trust_shallow:.3f}",
+                                        f"  Deep Trust: {result.trust_deep:.3f}",
+                                        f"  Shallow Stability: {result.shallow_stability:.3f}",
+                                        f"  Deep Stability: {result.deep_stability:.3f}",
+                                        f"  Change Points: {result.change_points}",
+                                    ])
+                                
+                                report_text = "\n".join(report_lines)
+                                st.download_button(
+                                    "📥 Download Report",
+                                    report_text,
+                                    "ml_splice_report.txt",
+                                    "text/plain",
+                                    key="download_splice_report"
+                                )
                     
                     except Exception as e:
                         st.error(f"Splicing error: {str(e)}")
