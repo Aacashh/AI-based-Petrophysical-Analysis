@@ -432,15 +432,15 @@ with st.sidebar:
     
     if upload_mode == "Upload Folder":
         st.markdown("#### 📂 Upload Folder Contents")
-        st.caption("Select all LAS files from a folder to browse by Field/Well")
+        st.caption("Select all LAS/DLIS files from a folder to browse by Field/Well")
         
         # Upload multiple files (simulating folder upload)
         folder_files = st.file_uploader(
-            "Upload LAS Files from Folder",
-            type=['las', 'LAS'],
+            "Upload LAS/DLIS Files from Folder",
+            type=['las', 'LAS', 'dlis', 'DLIS'],
             key='petro_folder',
             accept_multiple_files=True,
-            help="Select all LAS files from a folder (Ctrl+A to select all)"
+            help="Select all LAS/DLIS files from a folder (Ctrl+A to select all)"
         )
         
         if folder_files and len(folder_files) > 0:
@@ -481,18 +481,18 @@ with st.sidebar:
     elif upload_mode == "Upload Single File":
         st.markdown("#### 📄 Single File Upload")
         primary_file = st.file_uploader(
-            "Upload LAS File",
-            type=['las', 'LAS'],
+            "Upload LAS/DLIS File",
+            type=['las', 'LAS', 'dlis', 'DLIS'],
             key='petro_primary',
-            help="Upload a well log file for analysis"
+            help="Upload a well log file for analysis (LAS or DLIS format)"
         )
     
     else:
         # Multiple files for splicing mode
         st.markdown("#### 📑 Multiple Files (Splicing)")
         multi_files = st.file_uploader(
-            "Upload Multiple LAS Files",
-            type=['las', 'LAS'],
+            "Upload Multiple LAS/DLIS Files",
+            type=['las', 'LAS', 'dlis', 'DLIS'],
             key='petro_multi',
             accept_multiple_files=True,
             help="Upload multiple files for splicing or alignment"
