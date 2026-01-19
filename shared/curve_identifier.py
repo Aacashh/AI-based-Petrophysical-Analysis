@@ -1124,23 +1124,45 @@ class CurveIdentifier:
         
         # Check GR-Resistivity relationship (High GR + Low Rt → Shale)
         if gr_curve is not None and res_curve is not None:
-            valid_mask = ~(np.isnan(gr_curve) | np.isnan(res_curve))
-            if np.sum(valid_mask) > 10:
-                correlation = np.corrcoef(gr_curve[valid_mask], res_curve[valid_mask])[0, 1]
-                if correlation < -0.3:
-                    insights.append(f"GR-Resistivity inverse correlation ({correlation:.2f}): typical shale response")
+            # Ensure arrays are the same length for correlation
+            min_len = min(len(gr_curve), len(res_curve))
+            if min_len > 10:
+                gr_data = gr_curve[:min_len].astype(float)
+                res_data = res_curve[:min_len].astype(float)
+                # Create valid mask - ensure it's a proper boolean array
+                valid_mask = np.array(~(np.isnan(gr_data) | np.isnan(res_data)), dtype=bool)
+                valid_count = int(np.sum(valid_mask))
+                if valid_count > 10:
+                    # Use np.where for safe extraction
+                    valid_indices = np.where(valid_mask)[0]
+                    gr_valid = gr_data[valid_indices]
+                    res_valid = res_data[valid_indices]
+                    correlation = np.corrcoef(gr_valid, res_valid)[0, 1]
+                    if not np.isnan(correlation) and correlation < -0.3:
+                        insights.append(f"GR-Resistivity inverse correlation ({correlation:.2f}): typical shale response")
         
         # Check Density-Neutron crossover patterns
         if dens_curve is not None and neut_curve is not None:
-            valid_mask = ~(np.isnan(dens_curve) | np.isnan(neut_curve))
-            if np.sum(valid_mask) > 10:
-                # Check for gas effect (crossover)
-                # In gas zones: density reads low, neutron reads very low
-                d_norm = (dens_curve[valid_mask] - 2.0) / 0.5  # Normalize
-                n_norm = (neut_curve[valid_mask] - 0.15) / 0.15  # Normalize
-                crossover_zones = np.sum(d_norm > n_norm)
-                if crossover_zones > 0.1 * np.sum(valid_mask):
-                    insights.append("Density-Neutron crossover detected: possible gas zones")
+            # Ensure arrays are the same length
+            min_len = min(len(dens_curve), len(neut_curve))
+            if min_len > 10:
+                dens_data = dens_curve[:min_len].astype(float)
+                neut_data = neut_curve[:min_len].astype(float)
+                # Create valid mask - ensure it's a proper boolean array
+                valid_mask = np.array(~(np.isnan(dens_data) | np.isnan(neut_data)), dtype=bool)
+                valid_count = int(np.sum(valid_mask))
+                if valid_count > 10:
+                    # Use np.where for safe extraction
+                    valid_indices = np.where(valid_mask)[0]
+                    dens_valid = dens_data[valid_indices]
+                    neut_valid = neut_data[valid_indices]
+                    # Check for gas effect (crossover)
+                    # In gas zones: density reads low, neutron reads very low
+                    d_norm = (dens_valid - 2.0) / 0.5  # Normalize
+                    n_norm = (neut_valid - 0.15) / 0.15  # Normalize
+                    crossover_zones = np.sum(d_norm > n_norm)
+                    if crossover_zones > 0.1 * valid_count:
+                        insights.append("Density-Neutron crossover detected: possible gas zones")
         
         return insights
     
