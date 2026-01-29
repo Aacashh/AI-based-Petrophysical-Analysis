@@ -49,7 +49,7 @@ except ImportError:
 # Page configuration
 st.set_page_config(
     page_title="Petrophysical Analysis | WellLog Analyzer Pro",
-    page_icon="🔬",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -364,7 +364,7 @@ st.markdown("""
 # Header
 st.markdown("""
 <div class="main-header">
-    <div class="main-title">🔬 Petrophysical Analysis</div>
+    <div class="main-title">Petrophysical Analysis</div>
     <div class="main-subtitle">Comprehensive Well Log Processing • Outlier Detection • Noise Removal • Log Splicing • Depth Alignment</div>
 </div>
 """, unsafe_allow_html=True)
@@ -424,7 +424,7 @@ def scan_uploaded_files_for_field_well(uploaded_files):
 # =============================================================================
 
 with st.sidebar:
-    st.markdown("### 📁 Data Source")
+    st.markdown("### Data Source")
     
     # Data source mode selection
     upload_mode = st.radio(
@@ -443,7 +443,7 @@ with st.sidebar:
     ascii_import_settings = {}  # User-configurable ASCII import settings
     
     if upload_mode == "Upload Folder":
-        st.markdown("#### 📂 Upload Folder Contents")
+        st.markdown("#### Upload Folder Contents")
         st.caption("Select all LAS/DLIS files from a folder to browse by Field/Well")
         
         # Upload multiple files (simulating folder upload)
@@ -461,11 +461,11 @@ with st.sidebar:
                 folder_scan_result = scan_uploaded_files_for_field_well(folder_files)
             
             if folder_scan_result['fields']:
-                st.success(f"✅ Found {len(folder_scan_result['files'])} LAS files")
-                
+                st.success(f"Found {len(folder_scan_result['files'])} LAS files")
+
                 # Field dropdown
                 selected_field = st.selectbox(
-                    "🏭 FIELD",
+                    "FIELD",
                     options=folder_scan_result['fields'],
                     help="Select a field to filter wells"
                 )
@@ -477,21 +477,21 @@ with st.sidebar:
                     well_names = [w[0] for w in well_options]
                     
                     selected_well_idx = st.selectbox(
-                        "🛢️ WELL",
+                        "WELL",
                         options=range(len(well_names)),
                         format_func=lambda x: well_names[x],
                         help="Select a well to view logs"
                     )
-                    
+
                     if selected_well_idx is not None:
                         file_key = well_options[selected_well_idx][1]
                         selected_las_file = folder_scan_result['files'][file_key]['file_obj']
-                        st.info(f"📄 **File:** {folder_scan_result['files'][file_key]['FILENAME']}")
+                        st.info(f"**File:** {folder_scan_result['files'][file_key]['FILENAME']}")
             else:
-                st.warning("⚠️ No valid LAS files found")
+                st.warning("No valid LAS files found")
     
     elif upload_mode == "Upload Single File":
-        st.markdown("#### 📄 Single File Upload")
+        st.markdown("#### Single File Upload")
         primary_file = st.file_uploader(
             "Upload LAS/DLIS File",
             type=['las', 'LAS', 'dlis', 'DLIS'],
@@ -500,7 +500,7 @@ with st.sidebar:
         )
     
     elif upload_mode == "Upload ASCII/CSV":
-        st.markdown("#### 📄 ASCII/CSV File Upload")
+        st.markdown("#### ASCII/CSV File Upload")
         st.caption("Import generic ASCII, CSV, TXT, or delimited well log data")
         
         ascii_file = st.file_uploader(
@@ -511,7 +511,7 @@ with st.sidebar:
         )
         
         if ascii_file:
-            st.markdown("##### ⚙️ Import Settings")
+            st.markdown("##### Import Settings")
             
             # Allow user to override auto-detection
             with st.expander("Advanced Import Options", expanded=False):
@@ -535,7 +535,7 @@ with st.sidebar:
     
     else:
         # Multiple files for splicing mode
-        st.markdown("#### 📑 Multiple Files (Splicing)")
+        st.markdown("#### Multiple Files (Splicing)")
         multi_files = st.file_uploader(
             "Upload Multiple LAS/DLIS Files",
             type=['las', 'LAS', 'dlis', 'DLIS'],
@@ -546,7 +546,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    st.markdown("### 🔧 Track Visibility")
+    st.markdown("### Track Visibility")
     
     track_visibility = {}
     track_options = ['GR', 'CALIPER', 'RES_DEEP', 'RES_MED', 'DENS', 'NEUT', 'SONIC']
@@ -557,7 +557,7 @@ with st.sidebar:
     
     st.markdown("---")
     
-    st.markdown("### 📐 Display Settings")
+    st.markdown("### Display Settings")
     
     scale_option = st.selectbox(
         "Depth Scale",
@@ -569,16 +569,16 @@ with st.sidebar:
     st.markdown("---")
     
     st.markdown("""
-    ### 📚 About This Module
-    
+    ### About This Module
+
     **Processing Features:**
-    - 🔍 Outlier Detection (IF, ABOD)
-    - 🔧 Noise Removal
-    - 🔗 Log Splicing
-    - 📐 Depth Alignment (ML/NN)
-    
+    - Outlier Detection (IF, ABOD)
+    - Noise Removal
+    - Log Splicing
+    - Depth Alignment (ML/NN)
+
     ---
-    
+
     *Real-time processing with interactive visualizations*
     """)
 
@@ -639,10 +639,12 @@ def _identify_curves_from_mnemonics(curve_names, df=None):
             'contains': ['RHOB', 'DENS', 'DEN'],
             'ranges': (1.5, 3.2)  # g/cc
         },
+        # Expanded neutron mnemonics with tool-specific terminology for better detection
         'NEUT': {
             'exact': ['NPHI', 'TNPH', 'NPHZ', 'CNPOR', 'NPOR', 'TNPHI', 'PHIN', 'NEU', 'NEUT',
-                     'NPSS', 'NPLS', 'HNPO', 'APLC', 'APSC'],
-            'contains': ['NPHI', 'NEUT', 'NEU'],
+                     'NPSS', 'NPLS', 'HNPO', 'APLC', 'APSC', 'BPHI', 'SPHI', 'SNPHI', 'CNCF',
+                     'HNPHI', 'NPOR_SS', 'NPOR_LS', 'TNPOR', 'CN', 'CNL', 'CNLI', 'HTNP'],
+            'contains': ['NPHI', 'NEUT', 'NEU', 'TNPH', 'CNPOR'],
             'ranges': (-0.15, 0.60)  # v/v
         },
         'SONIC': {
@@ -650,14 +652,22 @@ def _identify_curves_from_mnemonics(curve_names, df=None):
             'contains': ['DT', 'SONIC', 'DTCO'],
             'ranges': (40, 200)  # us/ft
         },
+        # CALIPER - continuous borehole measurement (BS removed - now separate)
         'CALIPER': {
-            'exact': ['CALI', 'CAL', 'HCAL', 'DCAL', 'CALS', 'BS', 'C1', 'C2', 'C13', 'C24', 'LCAL'],
+            'exact': ['CALI', 'CAL', 'HCAL', 'DCAL', 'CALS', 'C1', 'C2', 'C13', 'C24', 'LCAL', 'SCAL', 'CALD'],
             'contains': ['CALI', 'CAL'],
             'ranges': (4, 20)  # inches
         },
+        # BIT SIZE - separate from CALIPER, typically constant value
+        'BS': {
+            'exact': ['BS', 'BIT', 'BITSZ', 'BITSIZE', 'BHS'],
+            'contains': ['BITSIZE', 'BITSZ'],
+            'ranges': (4, 26)  # inches - standard bit sizes
+        },
+        # Expanded SP mnemonics with stricter matching
         'SP': {
-            'exact': ['SP', 'SSP', 'PSP', 'SPR'],
-            'contains': ['SP'],
+            'exact': ['SP', 'SSP', 'PSP', 'SPR', 'SP1', 'SP2', 'SPONT'],
+            'contains': [],  # Avoid false positives from 'SP' substring
             'ranges': (-200, 100)  # mV
         },
         'PEF': {
@@ -793,7 +803,7 @@ if upload_mode == "Upload ASCII/CSV" and ascii_file and ASCII_PARSER_AVAILABLE:
             """, unsafe_allow_html=True)
         
         # Format detection details
-        with st.expander("📋 Format Detection Details", expanded=True):
+        with st.expander("Format Detection Details", expanded=True):
             detail_col1, detail_col2 = st.columns(2)
             
             with detail_col1:
@@ -864,7 +874,7 @@ if upload_mode == "Upload ASCII/CSV" and ascii_file and ASCII_PARSER_AVAILABLE:
                 st.caption(f"Unit: {depth_result.detected_unit} | {'↑ Increasing' if depth_result.is_increasing else '↓ Decreasing'}")
         
         # Data preview
-        st.markdown("### 👁️ Data Preview (First 15 Rows)")
+        st.markdown("### Data Preview (First 15 Rows)")
         
         preview_df = ascii_df.head(15).copy()
         # Highlight depth column
@@ -878,17 +888,17 @@ if upload_mode == "Upload ASCII/CSV" and ascii_file and ASCII_PARSER_AVAILABLE:
         validation = validate_ascii_data(ascii_df, depth_result)
         
         if validation['issues']:
-            st.error("⚠️ **Data Issues Found:**")
+            st.error("Data Issues Found:")
             for issue in validation['issues']:
-                st.markdown(f"- ❌ {issue}")
+                st.markdown(f"- {issue}")
         
         if validation['warnings']:
-            with st.expander("⚠️ Warnings", expanded=False):
+            with st.expander("Warnings", expanded=False):
                 for warning in validation['warnings']:
                     st.warning(warning)
         
         # Column statistics
-        with st.expander("📊 Column Statistics", expanded=False):
+        with st.expander("Column Statistics", expanded=False):
             stats_data = []
             for col, stats in validation['column_stats'].items():
                 row = {
@@ -909,7 +919,7 @@ if upload_mode == "Upload ASCII/CSV" and ascii_file and ASCII_PARSER_AVAILABLE:
             st.dataframe(pd.DataFrame(stats_data), use_container_width=True, hide_index=True)
         
         # Apply curve identification using the 12-layer methodology pattern
-        st.markdown("### 🎯 Curve Identification")
+        st.markdown("### Curve Identification")
         
         # Use the lightweight mnemonic-based identification
         ascii_mapping = _identify_curves_from_mnemonics(ascii_df.columns.tolist(), ascii_df)
@@ -937,7 +947,7 @@ if upload_mode == "Upload ASCII/CSV" and ascii_file and ASCII_PARSER_AVAILABLE:
         # Convert to LAS-compatible format for downstream processing
         st.markdown("### 🔄 Convert for Analysis")
         
-        if st.button("✅ Import Data for Analysis", type="primary", key="import_ascii"):
+        if st.button("Import Data for Analysis", type="primary", key="import_ascii"):
             try:
                 # Rename depth column to standard 'DEPTH'
                 processed_df = ascii_df.copy()
@@ -953,8 +963,8 @@ if upload_mode == "Upload ASCII/CSV" and ascii_file and ASCII_PARSER_AVAILABLE:
                 st.session_state['imported_ascii_mapping'] = ascii_mapping
                 st.session_state['ascii_import_complete'] = True
                 
-                st.success(f"✅ Successfully imported {len(processed_df):,} rows with {len(processed_df.columns)} columns!")
-                st.info("📌 Data is now available for analysis in the tabs below.")
+                st.success(f"Successfully imported {len(processed_df):,} rows with {len(processed_df.columns)} columns")
+                st.info("Data is now available for analysis in the tabs below.")
                 st.rerun()
             except Exception as e:
                 st.error(f"Error during import: {str(e)}")
@@ -962,7 +972,7 @@ if upload_mode == "Upload ASCII/CSV" and ascii_file and ASCII_PARSER_AVAILABLE:
         # Show analysis tabs if data was previously imported
         if st.session_state.get('ascii_import_complete') and 'imported_ascii_df' in st.session_state:
             st.markdown("---")
-            st.markdown('<div class="feature-header">📊 Analysis Tools</div>', unsafe_allow_html=True)
+            st.markdown('<div class="feature-header">Analysis Tools</div>', unsafe_allow_html=True)
             
             # Use imported data
             df = st.session_state['imported_ascii_df']
@@ -978,14 +988,14 @@ if upload_mode == "Upload ASCII/CSV" and ascii_file and ASCII_PARSER_AVAILABLE:
             
             # Display tabs for ASCII imported data
             tab1, tab2 = st.tabs([
-                "🔍 Outlier Detection",
-                "📊 Data Summary"
+                "Outlier Detection",
+                "Data Summary"
             ])
             
             with tab1:
                 st.markdown("""
                 <div class="feature-card">
-                    <div class="feature-title">🔍 Outlier Detection for Imported Data</div>
+                    <div class="feature-title">Outlier Detection for Imported Data</div>
                     <div class="feature-desc">
                         Analyze the imported ASCII data for outliers and anomalies.
                     </div>
@@ -1012,7 +1022,7 @@ if upload_mode == "Upload ASCII/CSV" and ascii_file and ASCII_PARSER_AVAILABLE:
                     st.warning("No numeric columns available for analysis.")
             
             with tab2:
-                st.markdown("### 📊 Data Summary Statistics")
+                st.markdown("### Data Summary Statistics")
                 
                 numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
                 if 'DEPTH' in numeric_cols:
@@ -1064,7 +1074,7 @@ if has_single_file:
         header = extract_header_info(las)
         
         # Display file info
-        st.markdown("### 📥 Loaded Data")
+        st.markdown("### Loaded Data")
         col1, col2, col3 = st.columns(3)
         display_file_info(header, df, unit, col1)
         
@@ -1092,7 +1102,7 @@ if has_single_file:
         # CURVE IDENTIFICATION RESULTS (12-Layer Methodology)
         # =================================================================
         if identification_report and CURVE_IDENTIFIER_AVAILABLE:
-            with st.expander("🎯 Curve Identification (12-Layer Methodology)", expanded=True):
+            with st.expander("Curve Identification (12-Layer Methodology)", expanded=True):
                 # Header with overall stats
                 summary = get_identification_summary(identification_report)
                 
@@ -1101,7 +1111,7 @@ if has_single_file:
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <span style="font-size: 1.3rem; font-weight: 700; color: #38bdf8;">
-                                🔬 Intelligent Curve Identification
+                                Intelligent Curve Identification
                             </span>
                             <br>
                             <span style="color: #94a3b8; font-size: 0.9rem;">
@@ -1121,7 +1131,7 @@ if has_single_file:
                 """, unsafe_allow_html=True)
                 
                 # Show the 12-layer methodology (using checkbox instead of nested expander)
-                show_methodology = st.checkbox("📋 Show 12-Layer Methodology Details", value=False, key="show_methodology")
+                show_methodology = st.checkbox("Show 12-Layer Methodology Details", value=False, key="show_methodology")
                 if show_methodology:
                     st.markdown("""
                     <div class="layer-methodology">
@@ -1215,7 +1225,7 @@ if has_single_file:
                 st.markdown("---")
                 
                 # Curve identification results table
-                st.markdown("#### 📊 Identified Curves")
+                st.markdown("#### Identified Curves")
                 
                 # Build results dataframe
                 results_data = []
@@ -1275,26 +1285,26 @@ if has_single_file:
                 
                 # Cross-curve insights
                 if identification_report.cross_curve_insights:
-                    st.markdown("#### 💡 Cross-Curve Insights")
+                    st.markdown("#### Cross-Curve Insights")
                     for insight in identification_report.cross_curve_insights:
                         st.markdown(f"""
                         <div class="insight-box">
-                            💡 {insight}
+                            {insight}
                         </div>
                         """, unsafe_allow_html=True)
                 
                 # Duplicate warnings
                 if identification_report.duplicate_warnings:
-                    st.markdown("#### ⚠️ Duplicate Curve Warnings")
+                    st.markdown("#### Duplicate Curve Warnings")
                     for warning in identification_report.duplicate_warnings:
                         st.markdown(f"""
                         <div class="duplicate-warning">
-                            ⚠️ {warning}
+                            {warning}
                         </div>
                         """, unsafe_allow_html=True)
                 
                 # Final mapping summary
-                st.markdown("#### 🗺️ Final Curve Mapping")
+                st.markdown("#### Final Curve Mapping")
                 mapping_cols = st.columns(4)
                 col_idx = 0
                 for curve_type, mnemonic in identification_report.mapping.items():
@@ -1312,13 +1322,13 @@ if has_single_file:
                     col_idx += 1
         
         # Add professional log preview following industry standards
-        with st.expander("📊 Professional Log Display (Industry Standard)", expanded=True):
+        with st.expander("Professional Log Display (Industry Standard)", expanded=True):
             from plotting import create_professional_log_display
             
             st.markdown("""
             <div style="padding: 0.5rem; background: #f8fafc; border-radius: 4px; margin-bottom: 1rem;">
                 <small style="color: #64748b;">
-                    📋 <strong>Track Layout:</strong> GR (Gamma Ray) | Resistivity (Log Scale) | Density-Neutron Overlay
+                    <strong>Track Layout:</strong> GR (Gamma Ray) | Resistivity (Log Scale) | Density-Neutron Overlay
                 </small>
             </div>
             """, unsafe_allow_html=True)
@@ -1345,11 +1355,11 @@ if has_single_file:
         
         # Main tabs
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "🔍 Outlier Detection",
-            "🔧 Noise Removal",
-            "🔗 Log Splicing",
-            "📐 Depth Alignment",
-            "🪨 Rock Classification"
+            "Outlier Detection",
+            "Noise Removal",
+            "Log Splicing",
+            "Depth Alignment",
+            "Rock Classification"
         ])
         
         # =================================================================
@@ -1358,7 +1368,7 @@ if has_single_file:
         with tab1:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">🔍 Automated Outlier Detection & Despiking</div>
+                <div class="feature-title">Automated Outlier Detection & Despiking</div>
                 <div class="feature-desc">
                     Detect anomalous data points using multiple ML algorithms: Isolation Forest, 
                     Local Outlier Factor (LOF), and Angular-Based Outlier Detection (ABOD).
@@ -1406,7 +1416,7 @@ if has_single_file:
                 )
             
             # Algorithm explanation
-            with st.expander("📐 How It Works", expanded=False):
+            with st.expander("How It Works", expanded=False):
                 if 'ABOD' in outlier_method:
                     st.markdown("""
                     <div class="algorithm-box">
@@ -1430,7 +1440,7 @@ if has_single_file:
                     </div>
                     """, unsafe_allow_html=True)
             
-            if selected_features and st.button("🚀 Run Outlier Detection", type="primary", key="run_outlier"):
+            if selected_features and st.button("Run Outlier Detection", type="primary", key="run_outlier"):
                 with st.spinner("Detecting outliers..."):
                     try:
                         # Run detection
@@ -1449,7 +1459,7 @@ if has_single_file:
                         st.session_state['outlier_df'] = df
                         
                         # Display results
-                        st.markdown('<div class="feature-header">📊 Detection Results</div>', unsafe_allow_html=True)
+                        st.markdown('<div class="feature-header">Detection Results</div>', unsafe_allow_html=True)
                         
                         # Metrics
                         m1, m2, m3, m4 = st.columns(4)
@@ -1488,11 +1498,11 @@ if has_single_file:
                         
                         # Outlier Visualization
                         if result.num_anomalies > 0:
-                            st.markdown("### 🎯 Detected Outliers - Per Curve Visualization")
+                            st.markdown("### Detected Outliers - Per Curve Visualization")
                             st.markdown("""
                             <div style="padding: 0.5rem; background: #fef2f2; border-radius: 4px; margin-bottom: 1rem; border-left: 4px solid #ef4444;">
                                 <small style="color: #991b1b;">
-                                    🔴 <strong>Red markers show detected outliers on each analyzed curve</strong> - 
+                                    <strong>Red markers show detected outliers on each analyzed curve</strong> - 
                                     {0} anomalies detected ({1:.1f}% of data). Histogram shows depth distribution.
                                 </small>
                             </div>
@@ -1513,7 +1523,7 @@ if has_single_file:
                             plt.close(outlier_fig)
                             
                             # Outlier depth summary table
-                            st.markdown("### 📋 Outlier Depth Summary")
+                            st.markdown("### Outlier Depth Summary")
                             outlier_depths = df.loc[result.anomaly_mask, 'DEPTH'].values
                             if len(outlier_depths) > 0:
                                 depth_ranges = []
@@ -1533,7 +1543,7 @@ if has_single_file:
                                 st.dataframe(range_df, use_container_width=True, hide_index=True)
                             
                             # Expandable: Professional multi-track display
-                            with st.expander("📈 Professional Multi-Track Log Display", expanded=False):
+                            with st.expander("Professional Multi-Track Log Display", expanded=False):
                                 from plotting import create_professional_log_display
                                 
                                 header_display = {
@@ -1559,7 +1569,7 @@ if has_single_file:
                             
                             # Feature importance
                             if result.feature_importance:
-                                st.markdown("### 🎯 Feature Importance")
+                                st.markdown("### Feature Importance")
                                 importance_df = pd.DataFrame([
                                     {'Curve': k, 'Importance': v} 
                                     for k, v in result.feature_importance.items()
@@ -1584,11 +1594,11 @@ if has_single_file:
                                     df_cleaned = clean_outliers(df, result, method=clean_method)
                                     st.session_state['cleaned_df'] = df_cleaned
                                     st.session_state['outlier_cleaned'] = True
-                                    st.success(f"✅ Cleaned {result.num_anomalies} outliers using {clean_method} method")
+                                    st.success(f"Successfully cleaned {result.num_anomalies} outliers using {clean_method} method")
                             
                             # Before/After comparison if cleaned
                             if st.session_state.get('outlier_cleaned') and 'cleaned_df' in st.session_state:
-                                st.markdown("### 📊 Before / After Comparison (Industry Standard Display)")
+                                st.markdown("### Before / After Comparison (Industry Standard Display)")
                                 
                                 from plotting import create_before_after_comparison
                                 
@@ -1632,7 +1642,7 @@ if has_single_file:
         with tab2:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">🔧 Tool Startup Noise Removal</div>
+                <div class="feature-title">Tool Startup Noise Removal</div>
                 <div class="feature-desc">
                     Detect and remove tool startup noise, which appears as constant/flat values 
                     at the beginning of logging runs. Uses rolling variance and slope analysis 
@@ -1653,7 +1663,7 @@ if has_single_file:
             from plotting import create_professional_log_display, create_before_after_comparison
             
             # Controls
-            st.markdown("### ⚙️ Detection Parameters")
+            st.markdown("### Detection Parameters")
             
             col1, col2, col3, col4 = st.columns(4)
             
@@ -1689,7 +1699,7 @@ if has_single_file:
             )
             
             # Algorithm explanation
-            with st.expander("📐 How It Works", expanded=False):
+            with st.expander("How It Works", expanded=False):
                 st.markdown("""
                 <div class="algorithm-box">
                 <strong>Tool Startup Noise Detection:</strong><br><br>
@@ -1704,7 +1714,7 @@ if has_single_file:
                 </div>
                 """, unsafe_allow_html=True)
             
-            if noise_curves and st.button("🔍 Detect Noise", type="primary", key="detect_noise"):
+            if noise_curves and st.button("Detect Noise", type="primary", key="detect_noise"):
                 with st.spinner("Analyzing noise patterns..."):
                     try:
                         results = []
@@ -1729,7 +1739,7 @@ if has_single_file:
                         
                         # Display results for each detection
                         for name, result in results:
-                            st.markdown(f'<div class="feature-header">📊 {name} Noise Detection Results</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="feature-header">{name} Noise Detection Results</div>', unsafe_allow_html=True)
                             
                             report = get_noise_quality_report(result, df, 'DEPTH')
                             
@@ -1779,7 +1789,7 @@ if has_single_file:
                                 combined_mask |= result.noise_mask
                                 total_noise_points += np.sum(result.noise_mask)
                             
-                            st.markdown("### 🔧 Detected Noise - Per Curve Visualization")
+                            st.markdown("### Detected Noise - Per Curve Visualization")
                             st.markdown("""
                             <div style="padding: 0.5rem; background: #fff7ed; border-radius: 4px; margin-bottom: 1rem; border-left: 4px solid #ff8c00;">
                                 <small style="color: #9a3412;">
@@ -1811,7 +1821,7 @@ if has_single_file:
                             plt.close(noise_fig)
                             
                             # Noise depth summary
-                            st.markdown("### 📋 Noise Zone Summary")
+                            st.markdown("### Noise Zone Summary")
                             noise_depths = df.loc[combined_mask, 'DEPTH'].values
                             if len(noise_depths) > 0:
                                 noise_summary = {
@@ -1827,7 +1837,7 @@ if has_single_file:
                                 st.dataframe(pd.DataFrame(noise_summary), use_container_width=True, hide_index=True)
                             
                             # Expandable: Detection metrics plots
-                            with st.expander("📉 Detection Metrics (Variance & Slope)", expanded=False):
+                            with st.expander("Detection Metrics (Variance & Slope)", expanded=False):
                                 fig2, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
                                 
                                 depth = df['DEPTH'].values
@@ -1865,7 +1875,7 @@ if has_single_file:
                                 plt.close(fig2)
                             
                             # Expandable: Professional multi-track display
-                            with st.expander("📈 Professional Multi-Track Log Display", expanded=False):
+                            with st.expander("Professional Multi-Track Log Display", expanded=False):
                                 from plotting import create_professional_log_display
                                 
                                 header_display = {
@@ -1902,7 +1912,7 @@ if has_single_file:
                                 )
                             
                             with remove_col2:
-                                if st.button("🗑️ Apply Removal", type="secondary"):
+                                if st.button("Apply Removal", type="secondary"):
                                     df_original = df.copy()
                                     for name, result in results:
                                         removal_result = remove_noise(df, result, method=remove_method)
@@ -1911,11 +1921,11 @@ if has_single_file:
                                     st.session_state['noise_cleaned_df'] = df
                                     st.session_state['noise_original_df'] = df_original
                                     st.session_state['noise_cleaned'] = True
-                                    st.success(f"✅ Noise removed using {remove_method} method")
+                                    st.success(f"Successfully removed noise using {remove_method} method")
                             
                             # Before/After comparison if cleaned
                             if st.session_state.get('noise_cleaned') and 'noise_cleaned_df' in st.session_state:
-                                st.markdown("### 📊 Before / After Comparison (Industry Standard Display)")
+                                st.markdown("### Before / After Comparison (Industry Standard Display)")
                                 
                                 from plotting import create_before_after_comparison
                                 
@@ -1979,7 +1989,7 @@ if has_single_file:
                         st.markdown("""
                         <div style="padding: 0.5rem; background: #fef2f2; border-radius: 4px; margin-bottom: 1rem; border-left: 4px solid #dc3545;">
                             <small style="color: #991b1b;">
-                                ❌ <strong>Red X markers show detected spike anomalies on each curve</strong> - 
+                                <strong>Red X markers show detected spike anomalies on each curve</strong> - 
                                 {0} spikes detected ({1:.2f}% of data)
                             </small>
                         </div>
@@ -2000,7 +2010,7 @@ if has_single_file:
                         plt.close(spike_fig)
                         
                         # Spike depth summary
-                        st.markdown("### 📋 Spike Locations")
+                        st.markdown("### Spike Locations")
                         spike_depths = df.loc[spike_mask, 'DEPTH'].values
                         if len(spike_depths) > 0:
                             spike_df = pd.DataFrame({
@@ -2012,7 +2022,7 @@ if has_single_file:
                             st.dataframe(spike_df, use_container_width=True, hide_index=True)
                         
                         # Expandable: Professional display
-                        with st.expander("📈 Professional Multi-Track Log Display", expanded=False):
+                        with st.expander("Professional Multi-Track Log Display", expanded=False):
                             from plotting import create_professional_log_display
                             
                             header_display = {
@@ -2036,7 +2046,7 @@ if has_single_file:
                             st.pyplot(fig)
                             plt.close(fig)
                     else:
-                        st.success("✅ No spikes detected with current threshold settings.")
+                        st.success("No spikes detected with current threshold settings.")
         
         # =================================================================
         # TAB 3: LOG SPLICING (info for single file mode)
@@ -2044,7 +2054,7 @@ if has_single_file:
         with tab3:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">🔗 Log Splicing & Concatenation</div>
+                <div class="feature-title">Log Splicing & Concatenation</div>
                 <div class="feature-desc">
                     Log splicing combines multiple log runs from different depth intervals into a 
                     continuous curve. This feature requires multiple LAS files.
@@ -2052,7 +2062,7 @@ if has_single_file:
             </div>
             """, unsafe_allow_html=True)
             
-            st.warning("⚠️ Log splicing requires multiple LAS files. Please select 'Multiple LAS Files' in the upload mode.")
+            st.warning("Log splicing requires multiple LAS files. Please select 'Multiple LAS Files' in the upload mode.")
             
             # Show the workflow diagram
             st.markdown("""
@@ -2077,7 +2087,7 @@ if has_single_file:
         with tab4:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">📐 Depth Alignment of Logging Measurements</div>
+                <div class="feature-title">Depth Alignment of Logging Measurements</div>
                 <div class="feature-desc">
                     Align measurements from different tools that may have depth discrepancies. 
                     For full alignment capabilities, upload multiple files.
@@ -2085,11 +2095,11 @@ if has_single_file:
             </div>
             """, unsafe_allow_html=True)
             
-            st.info("💡 For tool-to-tool alignment, upload multiple LAS files. Single file mode shows curve correlation analysis.")
+            st.info("For tool-to-tool alignment, upload multiple LAS files. Single file mode shows curve correlation analysis.")
             
             # Show correlation between curves in single file
             if len(feature_columns) >= 2:
-                st.markdown("### 📊 Curve Correlation Analysis")
+                st.markdown("### Curve Correlation Analysis")
                 
                 corr_col1, corr_col2 = st.columns(2)
                 
@@ -2103,7 +2113,7 @@ if has_single_file:
                         index=0 if len(feature_columns) > 1 else 0
                     )
                 
-                if st.button("📊 Analyze Correlation", type="primary"):
+                if st.button("Analyze Correlation", type="primary"):
                     from plotting import create_overlay_plot
                     
                     # Calculate correlation
@@ -2139,7 +2149,7 @@ if has_single_file:
         with tab5:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">🪨 Rock Type Classification (Unsupervised Learning)</div>
+                <div class="feature-title">Rock Type Classification (Unsupervised Learning)</div>
                 <div class="feature-desc">
                     Identify rock types (Sand/Shale, Reservoir/Non-Reservoir) using clustering algorithms.
                     Uses K-means and Gaussian Mixture Models with automatic optimal cluster detection.
@@ -2171,7 +2181,7 @@ if has_single_file:
             
             if ROCK_CLASSIFICATION_AVAILABLE:
                 # Feature selection for single file
-                st.markdown("### 🔧 Classification Settings")
+                st.markdown("### Classification Settings")
                 
                 settings_col1, settings_col2 = st.columns(2)
                 
@@ -2224,7 +2234,7 @@ if has_single_file:
                     )
                 
                 # Advanced options
-                with st.expander("⚙️ Advanced Settings", expanded=False):
+                with st.expander("Advanced Settings", expanded=False):
                     adv_col1, adv_col2 = st.columns(2)
                     
                     with adv_col1:
@@ -2261,7 +2271,7 @@ if has_single_file:
                 
                 # Run clustering
                 if len(selected_features) >= 2:
-                    if st.button("🚀 Run Rock Classification", type="primary", key="sf_run_rock_class"):
+                    if st.button("Run Rock Classification", type="primary", key="sf_run_rock_class"):
                         with st.spinner("Analyzing rock types..."):
                             try:
                                 # Run classification
@@ -2291,14 +2301,14 @@ if has_single_file:
                                 st.session_state['sf_rock_classification_mapping'] = mapping
                                 st.session_state['sf_rock_classification_header'] = header
                                 
-                                st.success(f"✅ Classification complete! Found {result.num_clusters} rock types.")
+                                st.success(f"Classification complete. Found {result.num_clusters} rock types.")
                                 
                             except Exception as e:
                                 st.error(f"Classification error: {str(e)}")
                                 import traceback
                                 st.code(traceback.format_exc())
                 else:
-                    st.warning("⚠️ Please select at least 2 feature curves for clustering.")
+                    st.warning("Please select at least 2 feature curves for clustering.")
                 
                 # Display results if available
                 if 'sf_rock_classification_result' in st.session_state:
@@ -2308,7 +2318,7 @@ if has_single_file:
                     rock_header = st.session_state['sf_rock_classification_header']
                     
                     st.markdown("---")
-                    st.markdown('<div class="feature-header">📊 Classification Results</div>', 
+                    st.markdown('<div class="feature-header">Classification Results</div>', 
                                unsafe_allow_html=True)
                     
                     # Metrics row
@@ -2349,7 +2359,7 @@ if has_single_file:
                         """, unsafe_allow_html=True)
                     
                     # Cluster interpretations
-                    st.markdown("### 🏷️ Rock Type Interpretations")
+                    st.markdown("### Rock Type Interpretations")
                     
                     facies_colors = get_facies_colors(result.num_clusters)
                     
@@ -2371,18 +2381,18 @@ if has_single_file:
                     
                     # K analysis if available
                     if result.k_analysis:
-                        with st.expander("📈 Cluster Quality Analysis (Elbow + Silhouette)", expanded=False):
+                        with st.expander("Cluster Quality Analysis (Elbow + Silhouette)", expanded=False):
                             k_fig = create_cluster_quality_plot(result.k_analysis, result.num_clusters)
                             st.pyplot(k_fig)
                             plt.close(k_fig)
                     
                     # Visualization tabs
-                    st.markdown("### 📊 Visualizations")
+                    st.markdown("### Visualizations")
                     
                     viz_tab1, viz_tab2, viz_tab3 = st.tabs([
-                        "📋 Facies Log Display",
-                        "📈 Crossplots",
-                        "🌐 3D Scatter Plot"
+                        "Facies Log Display",
+                        "Crossplots",
+                        "3D Scatter Plot"
                     ])
                     
                     with viz_tab1:
@@ -2457,7 +2467,7 @@ if has_single_file:
                                 
                                 if scatter_3d_fig:
                                     st.plotly_chart(scatter_3d_fig, use_container_width=True)
-                                    st.caption("🖱️ Drag to rotate, scroll to zoom, hover for details")
+                                    st.caption("Drag to rotate, scroll to zoom, hover for details")
                                 else:
                                     st.warning("Plotly not available for 3D visualization")
                             else:
@@ -2511,7 +2521,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
         if ('petro_well_groups_hash' not in st.session_state or 
             st.session_state.get('petro_well_groups_hash') != file_names_hash):
             
-            with st.spinner("🔍 Scanning files and detecting wells..."):
+            with st.spinner("Scanning files and detecting wells..."):
                 progress_messages = []
                 
                 def capture_progress(step, msg):
@@ -2540,21 +2550,21 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
         
         # Display grouping summary
         if num_wells == 0:
-            st.error("❌ No valid LAS files could be processed.")
+            st.error("No valid LAS files could be processed.")
             st.stop()
         
         # Show duplicate warnings if any
         if duplicate_warnings:
-            st.markdown("### ⚠️ Duplicate Files Detected")
+            st.markdown("### Duplicate Files Detected")
             for warning in duplicate_warnings:
                 st.markdown(f"""
                 <div class="duplicate-warning">
-                    ⚠️ {warning}
+                    {warning}
                 </div>
                 """, unsafe_allow_html=True)
         
         # Summary metrics
-        st.markdown("### 📊 File Analysis Summary")
+        st.markdown("### File Analysis Summary")
         col1, col2 = st.columns(2)
         with col1:
             st.markdown(f"""
@@ -2577,7 +2587,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
         # =================================================================
         
         st.markdown("---")
-        st.markdown("### 🎯 Select Target Well")
+        st.markdown("### Select Target Well")
         
         well_names = list(well_groups.keys())
         
@@ -2610,7 +2620,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
             
             st.markdown(f"""
             <div class="well-selector-card">
-                <h3 style="color: #38bdf8; margin: 0 0 1rem 0;">📊 {selected_well}</h3>
+                <h3 style="color: #38bdf8; margin: 0 0 1rem 0;">{selected_well}</h3>
                 <div class="well-info-grid">
                     <div class="well-stat">
                         <div class="well-stat-value">{len(selected_files)}</div>
@@ -2629,7 +2639,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
             """, unsafe_allow_html=True)
             
             # Show files for this well in an expander
-            with st.expander(f"📁 Files for {selected_well} ({len(selected_files)} files)", expanded=False):
+            with st.expander(f"Files for {selected_well} ({len(selected_files)} files)", expanded=False):
                 file_data = []
                 for f in selected_files:
                     unit_badge = '🔵 M' if f.original_unit == 'm' else '🟠 FT'
@@ -2694,16 +2704,16 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                 st.error("No common curves found across files for this well!")
                 st.stop()
             
-            st.success(f"✅ Ready to analyze **{selected_well}** | {len(common_curves)} common curves: {', '.join(common_curves[:5])}")
+            st.success(f"Ready to analyze **{selected_well}** | {len(common_curves)} common curves: {', '.join(common_curves[:5])}")
             
             # Add professional log preview for multi-file mode
-            with st.expander("📊 Professional Log Display (Multi-File Overlay)", expanded=True):
+            with st.expander("Professional Log Display (Multi-File Overlay)", expanded=True):
                 from plotting import create_multi_file_overlay, create_professional_log_display
                 
                 st.markdown("""
                 <div style="padding: 0.5rem; background: #f8fafc; border-radius: 4px; margin-bottom: 1rem;">
                     <small style="color: #64748b;">
-                        📋 <strong>Multi-File Overlay:</strong> View all log runs for alignment comparison before splicing
+                        <strong>Multi-File Overlay:</strong> View all log runs for alignment comparison before splicing
                     </small>
                 </div>
                 """, unsafe_allow_html=True)
@@ -2733,7 +2743,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                 st.markdown("---")
                 
                 # Also show professional display for the first file as reference
-                st.markdown("#### 📐 Reference: First File Full Log Display")
+                st.markdown("#### Reference: First File Full Log Display")
                 
                 first_header = {
                     'WELL': headers[0].get('WELL', selected_well) if headers else selected_well,
@@ -2755,11 +2765,11 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
         
         # Main tabs for multi-file operations
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "🔍 Outlier Detection",
-            "🔧 Noise Removal",
-            "🔗 Log Splicing",
-            "📐 Depth Alignment",
-            "🪨 Rock Classification"
+            "Outlier Detection",
+            "Noise Removal",
+            "Log Splicing",
+            "Depth Alignment",
+            "Rock Classification"
         ])
         
         # =================================================================
@@ -2768,7 +2778,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
         with tab3:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">🔗 ML-Based Log Splicing</div>
+                <div class="feature-title">ML-Based Log Splicing</div>
                 <div class="feature-desc">
                     Combine multiple log runs using an ML-enhanced workflow: Hampel filter for QC,
                     rolling variance for stability detection, PELT for optimal splice point detection,
@@ -2785,7 +2795,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
             from plotting import create_overlay_plot
             
             # Splicing parameters
-            st.markdown("### ⚙️ ML Splicing Parameters")
+            st.markdown("### ML Splicing Parameters")
             
             sp_col1, sp_col2 = st.columns(2)
             
@@ -2818,7 +2828,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                 )
             
             # Advanced QC parameters
-            with st.expander("🔧 Advanced QC Parameters", expanded=False):
+            with st.expander("Advanced QC Parameters", expanded=False):
                 qc_col1, qc_col2 = st.columns(2)
                 
                 with qc_col1:
@@ -2841,7 +2851,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                     )
             
             # Algorithm explanation
-            with st.expander("📐 ML Splicing Workflow", expanded=False):
+            with st.expander("ML Splicing Workflow", expanded=False):
                 st.markdown("""
                 <div class="algorithm-box">
                 <strong>7-Step ML-Based Splicing Pipeline:</strong><br><br>
@@ -2875,7 +2885,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                 """, unsafe_allow_html=True)
             
             # Run splicing
-            if st.button("🔗 Run ML Splicing", type="primary", key="run_splice"):
+            if st.button("Run ML Splicing", type="primary", key="run_splice"):
                 with st.spinner("Running ML-based splicing pipeline..."):
                     try:
                         # Sort by depth (shallowest first)
@@ -2926,14 +2936,14 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                             current_signal = result.merged_signal
                         
                         progress_bar.progress(100)
-                        status_text.text("✅ Splicing complete!")
+                        status_text.text("Splicing complete!")
                         
                         st.session_state['splice_results'] = splice_results
                         st.session_state['spliced_depth'] = current_depth
                         st.session_state['spliced_signal'] = current_signal
                         
                         # Display results
-                        st.markdown('<div class="feature-header">📊 ML Splicing Results</div>', unsafe_allow_html=True)
+                        st.markdown('<div class="feature-header">ML Splicing Results</div>', unsafe_allow_html=True)
                         
                         for i, result in enumerate(splice_results):
                             st.markdown(f"**Splice {i+1}:**")
@@ -2980,7 +2990,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                             st.divider()
                         
                         # Before/After Visualization - Professional Industry Standard
-                        st.markdown("### 📈 Before / After Comparison")
+                        st.markdown("### Before / After Comparison")
                         
                         from plotting import COLORS, STANDARD_RANGES
                         from matplotlib.ticker import AutoMinorLocator
@@ -3143,7 +3153,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                                 )
                         
                         with export_col2:
-                            if st.button("📋 Export Splice Report", key="export_splice_report"):
+                            if st.button("Export Splice Report", key="export_splice_report"):
                                 # Create detailed report
                                 report_lines = [
                                     "ML Log Splicing Report",
@@ -3197,7 +3207,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
         with tab4:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">📐 Depth Alignment of Logging Measurements</div>
+                <div class="feature-title">Depth Alignment of Logging Measurements</div>
                 <div class="feature-desc">
                     Align measurements from different tools using ML algorithms: 
                     correlation-based methods and Siamese Neural Networks for feature matching.
@@ -3211,7 +3221,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
             from plotting import create_comparison_log_plot, create_overlay_plot
             
             # File selection for alignment
-            st.markdown("### 📁 Select Files to Align")
+            st.markdown("### Select Files to Align")
             
             # Build file info for display
             file_display_names = []
@@ -3250,7 +3260,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                 )
                 
                 # Method selection
-                st.markdown("### 🔧 Alignment Method")
+                st.markdown("### Alignment Method")
                 
                 alignment_method = st.radio(
                     "Method",
@@ -3262,7 +3272,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                 if "Correlation" in alignment_method:
                     max_shift = st.slider("Max Shift (m)", min_value=5.0, max_value=50.0, value=20.0)
                     
-                    with st.expander("📐 Algorithm Details", expanded=False):
+                    with st.expander("Algorithm Details", expanded=False):
                         st.markdown("""
                         <div class="algorithm-box">
                         <strong>Cross-Correlation Alignment:</strong><br><br>
@@ -3286,7 +3296,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                     with siamese_col3:
                         epochs = st.slider("Training Epochs", min_value=10, max_value=50, value=30)
                     
-                    with st.expander("📐 Siamese Network Architecture", expanded=False):
+                    with st.expander("Siamese Network Architecture", expanded=False):
                         st.markdown("""
                         <div class="algorithm-box">
                         <strong>Siamese Neural Network for Depth Alignment:</strong><br><br>
@@ -3310,7 +3320,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                         """, unsafe_allow_html=True)
                 
                 # Run alignment
-                if st.button("🎯 Run Alignment", type="primary", key="run_align"):
+                if st.button("Run Alignment", type="primary", key="run_align"):
                     with st.spinner("Computing optimal alignment..."):
                         try:
                             ref_depth = ref_df['DEPTH'].values
@@ -3325,7 +3335,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                                     max_shift_meters=max_shift
                                 )
                                 
-                                st.markdown('<div class="feature-header">📊 Alignment Results</div>', unsafe_allow_html=True)
+                                st.markdown('<div class="feature-header">Alignment Results</div>', unsafe_allow_html=True)
                                 
                                 m1, m2, m3 = st.columns(3)
                                 
@@ -3354,7 +3364,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                                     """, unsafe_allow_html=True)
                                 
                                 # Correlation curve plot
-                                st.markdown("### 📈 Correlation Function")
+                                st.markdown("### Correlation Function")
                                 
                                 fig, ax = plt.subplots(figsize=(10, 4))
                                 ax.plot(result.shift_range, result.correlation_curve, 'b-', linewidth=1)
@@ -3388,7 +3398,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                                 
                                 progress_container.empty()
                                 
-                                st.markdown('<div class="feature-header">📊 Siamese Alignment Results</div>', unsafe_allow_html=True)
+                                st.markdown('<div class="feature-header">Siamese Alignment Results</div>', unsafe_allow_html=True)
                                 
                                 m1, m2, m3 = st.columns(3)
                                 
@@ -3442,7 +3452,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                                     plt.close(fig)
                             
                             # Apply shift and show comparison
-                            st.markdown("### 📊 Before/After Comparison")
+                            st.markdown("### Before/After Comparison")
                             
                             shift = result.optimal_shift if hasattr(result, 'optimal_shift') else result.optimal_shift
                             tgt_df_shifted = apply_depth_shift(tgt_df.copy(), shift, 'DEPTH')
@@ -3487,7 +3497,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
         with tab1:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">🔍 Automated Outlier Detection</div>
+                <div class="feature-title">Automated Outlier Detection</div>
                 <div class="feature-desc">
                     Detect outliers across all loaded files. Select curves to analyze and 
                     choose from multiple detection algorithms.
@@ -3545,7 +3555,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
         with tab2:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">🔧 Tool Noise Removal</div>
+                <div class="feature-title">Tool Noise Removal</div>
                 <div class="feature-desc">
                     Detect and remove tool startup/shutdown noise from selected files.
                 </div>
@@ -3586,7 +3596,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
         with tab5:
             st.markdown("""
             <div class="feature-card">
-                <div class="feature-title">🪨 Rock Type Classification (Unsupervised Learning)</div>
+                <div class="feature-title">Rock Type Classification (Unsupervised Learning)</div>
                 <div class="feature-desc">
                     Identify rock types (Sand/Shale, Reservoir/Non-Reservoir) using clustering algorithms.
                     Uses K-means and Gaussian Mixture Models with automatic optimal cluster detection.
@@ -3618,7 +3628,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
             
             if ROCK_CLASSIFICATION_AVAILABLE:
                 # File selection
-                st.markdown("### 📁 Select File for Classification")
+                st.markdown("### Select File for Classification")
                 
                 rock_file_names = []
                 for i, (header, df) in enumerate(zip(headers, dataframes)):
@@ -3637,7 +3647,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                 rock_header = headers[rock_file_idx] if rock_file_idx < len(headers) else {}
                 
                 # Feature selection
-                st.markdown("### 🔧 Classification Settings")
+                st.markdown("### Classification Settings")
                 
                 settings_col1, settings_col2 = st.columns(2)
                 
@@ -3687,7 +3697,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                     )
                 
                 # Advanced options
-                with st.expander("⚙️ Advanced Settings", expanded=False):
+                with st.expander("Advanced Settings", expanded=False):
                     adv_col1, adv_col2 = st.columns(2)
                     
                     with adv_col1:
@@ -3720,7 +3730,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                 
                 # Run clustering
                 if len(selected_features) >= 2:
-                    if st.button("🚀 Run Rock Classification", type="primary", key="run_rock_class"):
+                    if st.button("Run Rock Classification", type="primary", key="run_rock_class"):
                         with st.spinner("Analyzing rock types..."):
                             try:
                                 # Run classification
@@ -3750,14 +3760,14 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                                 st.session_state['rock_classification_mapping'] = rock_mapping
                                 st.session_state['rock_classification_header'] = rock_header
                                 
-                                st.success(f"✅ Classification complete! Found {result.num_clusters} rock types.")
+                                st.success(f"Classification complete. Found {result.num_clusters} rock types.")
                                 
                             except Exception as e:
                                 st.error(f"Classification error: {str(e)}")
                                 import traceback
                                 st.code(traceback.format_exc())
                 else:
-                    st.warning("⚠️ Please select at least 2 feature curves for clustering.")
+                    st.warning("Please select at least 2 feature curves for clustering.")
                 
                 # Display results if available
                 if 'rock_classification_result' in st.session_state:
@@ -3767,7 +3777,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                     rock_header = st.session_state['rock_classification_header']
                     
                     st.markdown("---")
-                    st.markdown('<div class="feature-header">📊 Classification Results</div>', 
+                    st.markdown('<div class="feature-header">Classification Results</div>', 
                                unsafe_allow_html=True)
                     
                     # Metrics row
@@ -3808,7 +3818,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                         """, unsafe_allow_html=True)
                     
                     # Cluster interpretations
-                    st.markdown("### 🏷️ Rock Type Interpretations")
+                    st.markdown("### Rock Type Interpretations")
                     
                     facies_colors = get_facies_colors(result.num_clusters)
                     
@@ -3830,18 +3840,18 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                     
                     # K analysis if available
                     if result.k_analysis:
-                        with st.expander("📈 Cluster Quality Analysis (Elbow + Silhouette)", expanded=False):
+                        with st.expander("Cluster Quality Analysis (Elbow + Silhouette)", expanded=False):
                             k_fig = create_cluster_quality_plot(result.k_analysis, result.num_clusters)
                             st.pyplot(k_fig)
                             plt.close(k_fig)
                     
                     # Visualization tabs
-                    st.markdown("### 📊 Visualizations")
+                    st.markdown("### Visualizations")
                     
                     viz_tab1, viz_tab2, viz_tab3 = st.tabs([
-                        "📋 Facies Log Display",
-                        "📈 Crossplots",
-                        "🌐 3D Scatter Plot"
+                        "Facies Log Display",
+                        "Crossplots",
+                        "3D Scatter Plot"
                     ])
                     
                     with viz_tab1:
@@ -3919,7 +3929,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
                                 
                                 if scatter_3d_fig:
                                     st.plotly_chart(scatter_3d_fig, use_container_width=True)
-                                    st.caption("🖱️ Drag to rotate, scroll to zoom, hover for details")
+                                    st.caption("Drag to rotate, scroll to zoom, hover for details")
                                 else:
                                     st.warning("Plotly not available for 3D visualization")
                             else:
@@ -3968,7 +3978,7 @@ elif upload_mode == "Upload Multiple (Splicing)" and multi_files and len(multi_f
 else:
     st.markdown("""
     <div class="info-panel" style="text-align: center; padding: 40px;">
-        <h2 style="color: #38bdf8;">📂 Upload LAS Files to Begin</h2>
+        <h2 style="color: #38bdf8;">Upload LAS Files to Begin</h2>
         <p style="color: #94a3b8;">
             Use the sidebar to upload well log files for petrophysical analysis.<br><br>
             <strong>Upload Folder:</strong> Select all files from a folder to browse by Field and Well<br>
@@ -3979,14 +3989,14 @@ else:
     """, unsafe_allow_html=True)
     
     # Feature overview
-    st.markdown('<div class="feature-header">🔧 Available Features</div>', unsafe_allow_html=True)
+    st.markdown('<div class="feature-header">Available Features</div>', unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     
     with col1:
         st.markdown("""
         <div class="feature-card">
-            <div class="feature-title">🔍 Outlier Detection</div>
+            <div class="feature-title">Outlier Detection</div>
             <div class="feature-desc">
                 <ul style="color: #94a3b8;">
                     <li>Isolation Forest</li>
@@ -4000,7 +4010,7 @@ else:
         
         st.markdown("""
         <div class="feature-card">
-            <div class="feature-title">🔧 Noise Removal</div>
+            <div class="feature-title">Noise Removal</div>
             <div class="feature-desc">
                 <ul style="color: #94a3b8;">
                     <li>Tool startup noise detection</li>
@@ -4015,7 +4025,7 @@ else:
     with col2:
         st.markdown("""
         <div class="feature-card">
-            <div class="feature-title">🔗 Log Splicing</div>
+            <div class="feature-title">Log Splicing</div>
             <div class="feature-desc">
                 <ul style="color: #94a3b8;">
                     <li>Cross-correlation alignment</li>
@@ -4029,7 +4039,7 @@ else:
         
         st.markdown("""
         <div class="feature-card">
-            <div class="feature-title">📐 Depth Alignment</div>
+            <div class="feature-title">Depth Alignment</div>
             <div class="feature-desc">
                 <ul style="color: #94a3b8;">
                     <li>Correlation-based methods</li>

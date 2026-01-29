@@ -7,8 +7,8 @@ import streamlit as st
 
 # Page configuration - must be first Streamlit command
 st.set_page_config(
-    page_title="WellLog Analyzer Pro",
-    page_icon="🛢️",
+    page_title="Petrophysical Analysis",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -96,101 +96,82 @@ st.markdown("""
 # Main Header
 st.markdown("""
 <div class="main-header">
-    <div class="main-title">🛢️ WellLog Analyzer Pro</div>
-    <div class="main-subtitle">Professional Well Log Analysis Suite • LAS File Visualization & Processing</div>
+    <div class="main-title">Petrophysical Analysis</div>
+    <div class="main-subtitle">Professional Well Log Analysis & Petrophysical Workflows</div>
 </div>
 """, unsafe_allow_html=True)
 
 # Welcome message
 st.markdown("""
-### Welcome to WellLog Analyzer Pro
+### Welcome to Petrophysical Analysis
 
-Select a tool from the sidebar to get started. This suite provides professional-grade well log 
-analysis capabilities with industry-standard visualization and processing tools.
+This application provides comprehensive petrophysical analysis workflows for well log data processing and analysis.
 """)
 
 st.markdown("---")
 
-# Feature cards
-st.markdown("### 🧰 Available Tools")
+# Feature card
+st.markdown("### Available Tools")
 
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("""
-    <div class="feature-card">
-        <div class="feature-icon">📊</div>
-        <div class="feature-title">Log Viewer</div>
-        <div class="feature-desc">
-            Professional LAS file visualization with industry-standard Techlog-style formatting.
-            <br><br>
-            <strong>Features:</strong>
-            <ul>
-                <li>Gamma Ray, Resistivity, Density-Neutron tracks</li>
-                <li>Configurable scales and track limits</li>
-                <li>Sand shading and crossover fills</li>
-                <li>Export to PNG, PDF, and LAS</li>
-            </ul>
-        </div>
+st.markdown("""
+<div class="feature-card">
+    <div class="feature-icon"></div>
+    <div class="feature-title">Petrophysical Analysis</div>
+    <div class="feature-desc">
+        Comprehensive petrophysical analysis workflow with advanced processing capabilities.
+        <br><br>
+        <strong>Features:</strong>
+        <ul>
+            <li>Automated Outlier Detection & Despiking (Isolation Forest, ABOD)</li>
+            <li>Tool Startup Noise Removal (Rolling variance + slope check)</li>
+            <li>Log Splicing & Concatenation (Cross-correlation, DTW)</li>
+            <li>Depth Alignment (Correlation-based, Siamese Neural Networks)</li>
+            <li>Vertical Log Visualizations</li>
+            <li>Multi-format support (LAS, ASCII, DLIS)</li>
+        </ul>
     </div>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.markdown("""
-    <div class="feature-card">
-        <div class="feature-icon">🧠</div>
-        <div class="feature-title">AI/ML Lab <span class="badge-new">NEW</span></div>
-        <div class="feature-desc">
-            Advanced machine learning features with real-time model training.
-            <br><br>
-            <strong>Features:</strong>
-            <ul>
-                <li>Outlier Detection (Isolation Forest, LOF)</li>
-                <li>Bayesian Hyperparameter Optimization</li>
-                <li>LSTM & CNN Neural Networks</li>
-                <li>Uncertainty Quantification</li>
-            </ul>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+</div>
+""", unsafe_allow_html=True)
 
 st.markdown("---")
 
 # Quick start guide
 st.markdown("""
-### 🚀 Quick Start
+### Quick Start
 
-1. **Use the sidebar** to navigate between tools
-2. **Upload LAS files** using the file upload widgets
-3. **Configure settings** using the sidebar controls
-4. **Export results** in your preferred format
+1. **Navigate to Petrophysical Analysis** in the sidebar
+2. **Upload LAS/ASCII/DLIS files** using the file upload widgets
+3. **Select your workflow** (Outlier Detection, Noise Removal, Splicing, or Depth Alignment)
+4. **Configure parameters** and visualize results
+5. **Export processed data** in LAS format
 
-### 📚 Supported File Formats
+### Supported File Formats
 
-- **Input:** LAS 2.0 files (.las, .LAS)
-- **Output:** PNG, PDF, LAS
+- **Input:** LAS 2.0/3.0 files (.las, .LAS), ASCII files (.txt, .dat, .csv), DLIS files (.dlis)
+- **Output:** LAS, PNG (visualizations)
 
-### 💡 Tips
+### Tips
 
-- For best visualization results, use the 1:500 scale for detailed analysis
-- Enable "Density-Neutron Crossover" to highlight gas effects
-- Try the **AI/ML Lab** for advanced outlier detection and neural network-based alignment
+- Use the automated curve identification to quickly map your log curves
+- Enable vertical log visualizations to see before/after comparisons
+- Combine multiple workflows for comprehensive data processing
+- Export processed logs for use in other software
 """)
 
 # Sidebar info
 with st.sidebar:
-    st.markdown("### 🛢️ WellLog Analyzer Pro")
+    st.markdown("### Petrophysical Analysis")
     st.markdown("---")
     st.markdown("""
     **Navigation**
-    
-    Use the pages above to access different tools.
-    
+
+    Access the Petrophysical Analysis tool from the pages menu above.
+
     ---
-    
+
     **About**
-    
-    Professional well log analysis suite for petrophysicists and geoscientists.
-    
+
+    Professional petrophysical analysis workflows for well log data processing.
+
     Version: 2.0.0
     """)
