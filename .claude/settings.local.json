@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(python -c \"from docx import Document; doc = Document\\(r''deliverables/Feedback 28 Jan 26.docx''\\); print\\(''\\\\n''.join\\([p.text for p in doc.paragraphs]\\)\\)\")",
+      "Bash(python:*)",
+      "Bash(del \"D:\\\\Work\\\\logai\\\\deliverables\\\\feedback_text.txt\")",
+      "Bash(del /f \"D:\\\\Work\\\\logai\\\\deliverables\\\\feedback_text.txt\")"
+    ]
+  }
+}

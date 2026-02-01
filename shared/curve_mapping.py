@@ -11,22 +11,29 @@ Use get_curve_mapping_advanced() for full layered identification
 """
 
 # Standard curve mnemonics for automatic detection (simple mode)
-# NOTE: Order matters for DEPTH - MD is prioritized over TVD/TVDSS
+# NOTE: MD is prioritized - TVD/TVDSS are NOT included as they represent
+# different depth references and should not be used as primary measured depth
 CURVE_MNEMONICS = {
-    'DEPTH': ['MD', 'DEPT', 'DEPTH', 'DPTH', 'TVD', 'TVDSS', 'AHD'],
+    'DEPTH': ['MD', 'DEPT', 'DEPTH', 'DPTH'],  # TVD/TVDSS intentionally excluded
 
     'GR': ['GR', 'GRC', 'GR_EDTC', 'SGR', 'CGR', 'HCGR', 'ECGR', 'GRD', 'GRS', 'GRAM', 'NGR'],
-    'RES_DEEP': ['RT', 'RDEP', 'RLLD', 'RLL3', 'ILD', 'RILD', 'LLD', 'RD', 'RDLA', 'RLA5', 
+    'RES_DEEP': ['RT', 'RDEP', 'RLLD', 'RLL3', 'ILD', 'RILD', 'LLD', 'RD', 'RDLA', 'RLA5',
                  'AT90', 'AHT90', 'R40', 'R36', 'HDRS', 'ATRT', 'RTRUE'],
     'RES_MED': ['RM', 'RMED', 'ILM', 'RILM', 'RLM', 'AT60', 'AHT60', 'R24', 'R20', 'HMRS', 'RLA2'],
-    'RES_SHAL': ['RS', 'RSHAL', 'MSFL', 'RXOZ', 'RXO', 'RLL1', 'SFL', 'LLS', 'RSFL', 'AT10', 
+    'RES_SHAL': ['RS', 'RSHAL', 'MSFL', 'RXOZ', 'RXO', 'RLL1', 'SFL', 'LLS', 'RSFL', 'AT10',
                  'AHT10', 'R10', 'LLHR', 'MLL'],
     'DENS': ['RHOB', 'RHOZ', 'DEN', 'ZDEN', 'BDEL', 'DENB', 'DENC', 'RHO', 'RHOF', 'DENS', 'HDENS'],
-    'NEUT': ['NPHI', 'TNPH', 'NPHZ', 'CNPOR', 'NPOR', 'TNPHI', 'PHIN', 'NEU', 'NEUT', 
-             'NPSS', 'NPLS', 'HNPO', 'APLC'],
+    # Expanded neutron mnemonics with tool-specific terminology
+    'NEUT': ['NPHI', 'TNPH', 'NPHZ', 'CNPOR', 'NPOR', 'TNPHI', 'PHIN', 'NEU', 'NEUT',
+             'NPSS', 'NPLS', 'HNPO', 'APLC', 'APSC', 'BPHI', 'SPHI', 'SNPHI', 'CNCF',
+             'HNPHI', 'NPOR_SS', 'NPOR_LS', 'TNPOR', 'CN', 'CNL', 'CNLI', 'HTNP'],
     'SONIC': ['DT', 'DTC', 'DTCO', 'AC', 'SONIC', 'DTS', 'DTCS', 'DTSM', 'DT4P', 'DTLN'],
-    'CALIPER': ['CALI', 'CAL', 'HCAL', 'DCAL', 'CALS', 'BS', 'C1', 'C2', 'LCAL', 'SCAL'],
-    'SP': ['SP', 'SSP', 'PSP', 'SPR'],
+    # CALIPER - continuous borehole measurement (BS removed - now separate)
+    'CALIPER': ['CALI', 'CAL', 'HCAL', 'DCAL', 'CALS', 'C1', 'C2', 'LCAL', 'SCAL', 'CALD', 'CALX', 'CALY'],
+    # BIT SIZE - separate from CALIPER, typically constant value
+    'BS': ['BS', 'BIT', 'BITSZ', 'BITSIZE', 'BHS'],
+    # Expanded SP mnemonics
+    'SP': ['SP', 'SSP', 'PSP', 'SPR', 'SP1', 'SP2', 'SPONT'],
     'PEF': ['PEF', 'PE', 'PEFZ', 'PEZ', 'PEFA'],
 }
 
@@ -108,10 +115,11 @@ def get_curve_mapping(las):
         'NEUT': None,
         'SONIC': None,
         'CALIPER': None,
+        'BS': None,
         'SP': None,
         'PEF': None,
     }
-    
+
     def find_match(mnemonics):
         """Find first matching curve from list of possible mnemonics."""
         for m in mnemonics:
@@ -255,6 +263,7 @@ def get_curve_mapping_advanced(las, use_layered=True):
             'NEUT': None,
             'SONIC': None,
             'CALIPER': None,
+            'BS': None,
             'SP': None,
             'PEF': None,
         }

@@ -3,6 +3,7 @@ import matplotlib.patches as mpatches
 import numpy as np
 from matplotlib.ticker import LogLocator, LogFormatter, AutoMinorLocator
 import matplotlib.gridspec as gridspec
+import warnings
 
 # Industry-standard colors (Schlumberger/Techlog style)
 COLORS = {
@@ -149,9 +150,12 @@ def create_professional_log_display(
     # Hide y-axis labels on non-depth tracks
     for ax in [ax_gr, ax_res, ax_dn]:
         plt.setp(ax.get_yticklabels(), visible=False)
-    
-    plt.tight_layout()
-    
+
+    # Apply tight layout (suppress warning as GridSpec already handles layout)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        plt.tight_layout()
+
     return fig
 
 

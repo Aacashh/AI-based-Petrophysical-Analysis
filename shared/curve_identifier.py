@@ -89,6 +89,139 @@ def _percentile_range(data: np.ndarray) -> Optional[Tuple[float, float]]:
     return (float(np.percentile(valid_data, 7)), float(np.percentile(valid_data, 93)))
 
 
+def _is_valid_measured_depth(data: np.ndarray) -> Tuple[bool, str]:
+    """
+    Validate that data represents a valid measured depth curve.
+
+    Checks:
+    1. Monotonic increase (with small tolerance for minor reversals)
+    2. Realistic step size (typically 0.1524m = 0.5ft, or similar)
+    3. Positive values
+    4. No large gaps or discontinuities
+
+    Args:
+        data: Array of depth values
+
+    Returns:
+        Tuple of (is_valid, reason_string)
+    """
+    data = _ensure_array(data)
+    if len(data) < 10:
+        return False, "Insufficient data points"
+
+    # Replace null values
+    data = data.astype(float)
+    for null_val in NULL_VALUES:
+        data = np.where(data == null_val, np.nan, data)
+    valid_data = data[~np.isnan(data)]
+
+    if len(valid_data) < 10:
+        return False, "Insufficient valid data"
+
+    # Check if mostly positive (depths should be positive)
+    if np.mean(valid_data > 0) < 0.9:
+        return False, "Contains negative values"
+
+    # Check monotonic increase (allow small tolerance for minor reversals)
+    diffs = np.diff(valid_data)
+    increasing_fraction = np.mean(diffs >= 0)
+    if increasing_fraction < 0.95:
+        return False, f"Not monotonically increasing ({increasing_fraction:.0%})"
+
+    # Check for realistic step size (0.05m to 5m typical)
+    positive_diffs = diffs[diffs > 0]
+    if len(positive_diffs) > 0:
+        median_step = np.median(positive_diffs)
+        if median_step < 0.01 or median_step > 100:
+            return False, f"Unrealistic step size ({median_step:.4f})"
+
+    return True, "Valid MD"
+
+
+def _is_constant_or_near_constant(data: np.ndarray, threshold: float = 0.02) -> Tuple[bool, float]:
+    """
+    Check if a curve is constant or near-constant (typical for bit size).
+
+    Bit size is typically a constant value (e.g., 8.5", 12.25") with very low variance.
+    Caliper has borehole variation and much higher variance.
+
+    Args:
+        data: Array of curve values
+        threshold: Coefficient of variation threshold (default 2%)
+
+    Returns:
+        Tuple of (is_constant, coefficient_of_variation)
+    """
+    data = _ensure_array(data)
+    if len(data) == 0:
+        return False, 1.0
+
+    # Replace null values
+    data = data.astype(float)
+    for null_val in NULL_VALUES:
+        data = np.where(data == null_val, np.nan, data)
+    valid_data = data[~np.isnan(data)]
+
+    if len(valid_data) < 5:
+        return False, 1.0
+
+    mean_val = np.mean(valid_data)
+    if mean_val == 0:
+        return False, 1.0
+
+    std_val = np.std(valid_data)
+    cv = std_val / abs(mean_val)  # Coefficient of variation
+
+    return cv < threshold, cv
+
+
+# Standard bit sizes in inches - used to identify BS curves
+STANDARD_BIT_SIZES = [
+    6.0, 6.5, 6.75,           # Small hole
+    8.375, 8.5, 8.75,         # Medium hole
+    9.5, 9.875,               # Medium-large
+    10.625, 12.0, 12.25,      # Large hole
+    14.75, 17.5,              # Very large
+    20.0, 22.0, 26.0          # Conductor/surface
+]
+
+
+def _matches_standard_bit_size(data: np.ndarray, tolerance: float = 0.25) -> Tuple[bool, Optional[float]]:
+    """
+    Check if a curve's mean value matches a standard bit size.
+
+    Standard bit sizes: 6", 8.5", 12.25", 17.5", etc.
+
+    Args:
+        data: Array of curve values
+        tolerance: Tolerance in inches for matching (default 0.25")
+
+    Returns:
+        Tuple of (is_bit_size, matched_size or None)
+    """
+    data = _ensure_array(data)
+    if len(data) == 0:
+        return False, None
+
+    # Replace null values
+    data = data.astype(float)
+    for null_val in NULL_VALUES:
+        data = np.where(data == null_val, np.nan, data)
+    valid_data = data[~np.isnan(data)]
+
+    if len(valid_data) < 5:
+        return False, None
+
+    mean_val = np.mean(valid_data)
+
+    # Check against standard bit sizes
+    for bit_size in STANDARD_BIT_SIZES:
+        if abs(mean_val - bit_size) < tolerance:
+            return True, bit_size
+
+    return False, None
+
+
 # =============================================================================
 # DOI-AWARE RESISTIVITY CLASSIFICATION HELPERS
 # =============================================================================
@@ -122,6 +255,49 @@ def extract_valid_doi(mnemonic: str) -> Optional[int]:
         return int(m.group(1))
     
     return None
+
+
+def get_neutron_preference_score(mnemonic: str, description: str) -> float:
+    """
+    Calculate a preference score for neutron curves.
+
+    ISSUE 3 FIX: When multiple neutron curves exist, prefer curves with:
+    - "thermal neutron" in description (highest preference)
+    - "limestone" or "limestone matrix" in description
+    - TNPH mnemonic (thermal neutron porosity hydrogen)
+
+    Args:
+        mnemonic: Curve mnemonic (e.g., 'TNPH', 'NPHI')
+        description: Curve description text
+
+    Returns:
+        Preference score (higher = more preferred)
+    """
+    score = 0.0
+    mnemonic_upper = mnemonic.upper() if mnemonic else ""
+    desc_lower = description.lower() if description else ""
+
+    # Highest preference: thermal neutron in description
+    if 'thermal neutron' in desc_lower or 'thermal' in desc_lower:
+        score += 2.0
+
+    # High preference: limestone or limestone matrix
+    if 'limestone' in desc_lower or 'ls matrix' in desc_lower or 'lime matrix' in desc_lower:
+        score += 1.5
+
+    # Preference for TNPH mnemonic (thermal neutron)
+    if 'TNPH' in mnemonic_upper or 'TNP' in mnemonic_upper:
+        score += 1.0
+
+    # Slight preference for hydrogen-based (NPHI)
+    if 'NPHI' in mnemonic_upper:
+        score += 0.5
+
+    # Preference for compensated neutron
+    if 'compensated' in desc_lower or 'cnl' in desc_lower:
+        score += 0.5
+
+    return score
 
 
 def classify_resistivity_by_doi(
@@ -193,6 +369,7 @@ class CurveType(Enum):
     NEUT = "NEUT"                # Neutron Porosity
     SONIC = "SONIC"              # Sonic/Acoustic
     CALIPER = "CALIPER"          # Caliper
+    BS = "BS"                    # Bit Size
     SP = "SP"                    # Spontaneous Potential
     PEF = "PEF"                  # Photoelectric Factor
     DPHI = "DPHI"                # Density Porosity
@@ -260,14 +437,16 @@ class IdentificationReport:
 
 # Layer 2 & 3: Keyword and Mnemonic patterns
 CURVE_PATTERNS = {
-    # NOTE: Order matters for DEPTH - MD is prioritized over TVD/TVDSS
+    # NOTE: MD is strongly prioritized over TVD/TVDSS for measured depth
+    # TVD/TVDSS should NOT be selected as primary depth reference
     CurveType.DEPTH: {
-        'mnemonics': ['MD', 'DEPT', 'DEPTH', 'DPTH', 'TVD', 'TVDSS', 'AHD'],
-        'keywords': ['depth', 'measured', 'vertical'],
+        'mnemonics': ['MD', 'DEPT', 'DEPTH', 'DPTH'],  # TVD/TVDSS removed - these are not MD
+        'keywords': ['measured depth', 'hole depth'],
+        'negative_keywords': ['true vertical', 'tvd', 'tvdss', 'subsea'],  # Reject TVD
         'weight': 1.0
     },
     CurveType.GR: {
-        'mnemonics': ['GR', 'GRC', 'GR_EDTC', 'SGR', 'CGR', 'HCGR', 'ECGR', 
+        'mnemonics': ['GR', 'GRC', 'GR_EDTC', 'SGR', 'CGR', 'HCGR', 'ECGR',
                       'GRD', 'GRS', 'GRAM', 'GAPI', 'NGR', 'NGAM'],
         'keywords': ['gamma', 'ray', 'natural', 'spectral'],
         'weight': 1.0
@@ -277,18 +456,30 @@ CURVE_PATTERNS = {
                       'RDLA', 'RLA5', 'RLA3', 'AT90', 'AHT90', 'R40', 'R36',
                       'HDRS', 'ATRT', 'RTRUE', 'RXO8'],
         'keywords': ['deep', 'resistivity', 'true', 'formation'],
+        # ISSUE 2 FIX: Extended negative keywords to prevent neutron count rate misclassification
+        'negative_keywords': ['neutron', 'count', 'thermal', 'cps', 'c/s', 'counts',
+                              'capture', 'porosity', 'hydrogen', 'epithermal', 'sigma',
+                              'count rate', 'counts/sec', 'counts per second'],
         'weight': 1.0
     },
     CurveType.RES_MED: {
         'mnemonics': ['RM', 'RMED', 'ILM', 'RILM', 'RLM', 'RILM', 'AT60',
                       'AHT60', 'R24', 'R20', 'HMRS', 'RLA2'],
         'keywords': ['medium', 'mid', 'intermediate'],
+        # ISSUE 2 FIX: Extended negative keywords
+        'negative_keywords': ['neutron', 'count', 'thermal', 'cps', 'c/s', 'counts',
+                              'capture', 'porosity', 'hydrogen', 'epithermal', 'sigma',
+                              'count rate', 'counts/sec', 'counts per second'],
         'weight': 1.0
     },
     CurveType.RES_SHAL: {
         'mnemonics': ['RS', 'RSHAL', 'MSFL', 'RXOZ', 'RXO', 'RLL1', 'SFL', 'LLS',
                       'RSFL', 'RSHA', 'AT10', 'AHT10', 'R10', 'LLHR', 'MLL'],
         'keywords': ['shallow', 'invaded', 'flushed', 'microspherically'],
+        # ISSUE 2 FIX: Extended negative keywords
+        'negative_keywords': ['neutron', 'count', 'thermal', 'cps', 'c/s', 'counts',
+                              'capture', 'porosity', 'hydrogen', 'epithermal', 'sigma',
+                              'count rate', 'counts/sec', 'counts per second'],
         'weight': 1.0
     },
     CurveType.DENS: {
@@ -298,10 +489,16 @@ CURVE_PATTERNS = {
         'weight': 1.0
     },
     CurveType.NEUT: {
+        # Enhanced neutron mnemonic list with tool-specific terminology
         'mnemonics': ['NPHI', 'TNPH', 'NPHZ', 'CNPOR', 'NPOR', 'TNPHI', 'PHIN',
-                      'NEU', 'NEUT', 'NPSS', 'NPLS', 'HNPO', 'APLC', 'APSC'],
-        'keywords': ['neutron', 'porosity', 'hydrogen'],
-        'weight': 1.0
+                      'NEU', 'NEUT', 'NPSS', 'NPLS', 'HNPO', 'APLC', 'APSC',
+                      'BPHI', 'SPHI', 'SNPHI', 'CNCF', 'HNPHI', 'NPOR_SS',
+                      'NPOR_LS', 'TNPOR', 'PIGN', 'CN', 'CNL', 'CNLI', 'HTNP'],
+        # Expanded neutron keywords for better description-based matching
+        'keywords': ['neutron', 'porosity', 'hydrogen', 'thermal neutron',
+                     'neutron porosity', 'compensated neutron', 'cnl', 'tnph',
+                     'hydrogen index', 'epithermal', 'sidewall neutron'],
+        'weight': 1.2  # Higher weight for description matching
     },
     CurveType.SONIC: {
         'mnemonics': ['DT', 'DTC', 'DTCO', 'AC', 'SONIC', 'DTS', 'DTCS',
@@ -309,15 +506,25 @@ CURVE_PATTERNS = {
         'keywords': ['sonic', 'acoustic', 'slowness', 'compressional', 'shear'],
         'weight': 1.0
     },
+    # CALIPER - continuous borehole measurement with variation
     CurveType.CALIPER: {
-        'mnemonics': ['CALI', 'CAL', 'HCAL', 'DCAL', 'CALS', 'BS', 'DEVI',
-                      'C1', 'C2', 'C13', 'C24', 'LCAL', 'SCAL'],
-        'keywords': ['caliper', 'borehole', 'diameter', 'hole'],
+        'mnemonics': ['CALI', 'CAL', 'HCAL', 'DCAL', 'CALS', 'DEVI',
+                      'C1', 'C2', 'C13', 'C24', 'LCAL', 'SCAL', 'CALD', 'CALX', 'CALY'],
+        'keywords': ['caliper', 'borehole', 'diameter', 'hole size', 'wellbore'],
+        'negative_keywords': ['bit'],  # Distinguish from BS
+        'weight': 1.0
+    },
+    # BIT SIZE (BS) - separate from CALIPER - typically constant/near-constant
+    CurveType.BS: {
+        'mnemonics': ['BS', 'BIT', 'BITSZ', 'BITSIZE', 'BHS'],
+        'keywords': ['bit size', 'bit diameter', 'drill bit'],
         'weight': 1.0
     },
     CurveType.SP: {
-        'mnemonics': ['SP', 'SSP', 'PSP', 'SPR', 'SPHI'],
-        'keywords': ['spontaneous', 'potential', 'self'],
+        # Expanded SP mnemonics and keywords
+        'mnemonics': ['SP', 'SSP', 'PSP', 'SPR', 'SP1', 'SP2', 'SPONT'],
+        'keywords': ['spontaneous potential', 'self potential', 'sp curve', 'sp log'],
+        'negative_keywords': ['porosity', 'saturation'],  # Avoid SPHI confusion
         'weight': 1.0
     },
     CurveType.PEF: {
@@ -345,14 +552,23 @@ UNIT_PATTERNS = {
     CurveType.RES_DEEP: {
         # Includes all common resistivity unit variations: OHMM, OHM-M, OHM.M, etc.
         'valid_units': ['ohmm', 'ohm.m', 'ohm-m', 'ohm', 'ohmm2/m', 'OHMM', 'OHM-M', 'OHM.M', 'ohms'],
+        # ISSUE 2 FIX: Extended negative units - these indicate count-rate/neutron curves, NOT resistivity
+        'negative_units': ['cps', 'c/s', 'counts', 'count', 'api', 'gapi', 'pu', '%', 'v/v', 'frac',
+                          'cu', 'capture units', 'sigma', 'counts/sec', 'barns'],
         'typical_range': (0.1, 10000)  # ohm.m
     },
     CurveType.RES_MED: {
         'valid_units': ['ohmm', 'ohm.m', 'ohm-m', 'ohm', 'ohmm2/m', 'OHMM', 'OHM-M', 'OHM.M', 'ohms'],
+        # ISSUE 2 FIX: Extended negative units
+        'negative_units': ['cps', 'c/s', 'counts', 'count', 'api', 'gapi', 'pu', '%', 'v/v', 'frac',
+                          'cu', 'capture units', 'sigma', 'counts/sec', 'barns'],
         'typical_range': (0.1, 10000)
     },
     CurveType.RES_SHAL: {
         'valid_units': ['ohmm', 'ohm.m', 'ohm-m', 'ohm', 'ohmm2/m', 'OHMM', 'OHM-M', 'OHM.M', 'ohms'],
+        # ISSUE 2 FIX: Extended negative units
+        'negative_units': ['cps', 'c/s', 'counts', 'count', 'api', 'gapi', 'pu', '%', 'v/v', 'frac',
+                          'cu', 'capture units', 'sigma', 'counts/sec', 'barns'],
         'typical_range': (0.1, 10000)
     },
     CurveType.DENS: {
@@ -361,7 +577,7 @@ UNIT_PATTERNS = {
     },
     CurveType.NEUT: {
         # Supports both decimal (v/v) and percentage (%, PU) units
-        'valid_units': ['v/v', 'pu', 'PU', '%', 'frac', 'dec', 'm3/m3', 'percent'],
+        'valid_units': ['v/v', 'pu', 'PU', '%', 'frac', 'dec', 'm3/m3', 'percent', 'p.u.', 'p.u', 'pct'],
         'typical_range': (-0.15, 0.60),  # v/v or fractional
         'percentage_range': (-15, 60)    # For % or PU units
     },
@@ -373,8 +589,14 @@ UNIT_PATTERNS = {
         'valid_units': ['in', 'inch', 'inches', 'cm', 'mm'],
         'typical_range': (4, 20)  # inches
     },
+    CurveType.BS: {
+        # Bit size uses same units as caliper
+        'valid_units': ['in', 'inch', 'inches', 'cm', 'mm'],
+        'typical_range': (4, 26)  # inches - standard bit sizes
+    },
     CurveType.SP: {
-        'valid_units': ['mv', 'millivolts', 'v'],
+        # Strict SP unit validation - MUST be millivolts
+        'valid_units': ['mv', 'millivolts', 'millivolt', 'mvolt'],
         'typical_range': (-200, 100)  # mV
     },
     CurveType.PEF: {
@@ -395,7 +617,10 @@ PHYSICAL_RANGES = {
                      'min_pct': -20, 'max_pct': 100, 'typical_min_pct': -5, 'typical_max_pct': 45},
     CurveType.SONIC: {'min': 30, 'max': 250, 'typical_min': 40, 'typical_max': 140},
     CurveType.CALIPER: {'min': 0, 'max': 30, 'typical_min': 6, 'typical_max': 18},
-    CurveType.SP: {'min': -500, 'max': 500, 'typical_min': -200, 'typical_max': 50},
+    # BS is typically constant - standard bit sizes: 6", 8.5", 12.25", 17.5", etc.
+    CurveType.BS: {'min': 4, 'max': 30, 'typical_min': 6, 'typical_max': 18},
+    # SP range refined for petrophysical correctness
+    CurveType.SP: {'min': -300, 'max': 200, 'typical_min': -150, 'typical_max': 50},
     CurveType.PEF: {'min': 0.5, 'max': 10, 'typical_min': 1.5, 'typical_max': 6.0},
 }
 
@@ -482,9 +707,9 @@ class CurveIdentifier:
         # Layer 8: Cross-curve validation
         cross_insights = self._layer_8_cross_curve_checks(curve_results, las)
         
-        # Layer 9: Duplicate resolution
+        # Layer 9: Duplicate resolution (pass las for neutron preference)
         curve_results, duplicates = self._layer_9_duplicate_resolution(
-            curve_results, candidates_by_type
+            curve_results, candidates_by_type, las
         )
         
         # Build final mapping
@@ -658,45 +883,87 @@ class CurveIdentifier:
     ) -> Tuple[LayerResult, List[CurveType]]:
         """
         Layer 1 & 2: Description/keyword scoring (+15 pts).
-        
+
+        Applies both positive keyword matching and negative keyword filtering.
+        Negative keywords cause a curve type to be rejected.
+
         Returns:
             Tuple of (LayerResult, list of matched CurveTypes)
         """
         combined_text = f"{mnemonic} {description or ''}".lower()
-        
-        # Keywords that indicate curve type
+
+        # Keywords that indicate curve type - extended lists
         keyword_patterns = {
-            CurveType.GR: ['gamma', 'gr ', 'natural radioactivity', 'gapi'],
-            CurveType.RES_DEEP: ['deep resistivity', 'true resistivity', 'formation resistivity', 
+            CurveType.GR: ['gamma', 'gr ', 'natural radioactivity', 'gapi', 'gamma ray'],
+            CurveType.RES_DEEP: ['deep resistivity', 'true resistivity', 'formation resistivity',
                                  'deep induction', 'laterolog deep'],
             CurveType.RES_MED: ['medium resistivity', 'intermediate', 'medium induction'],
             CurveType.RES_SHAL: ['shallow resistivity', 'invaded zone', 'flushed', 'microsphere'],
             CurveType.DENS: ['bulk density', 'formation density', 'density log', 'rhob'],
-            CurveType.NEUT: ['neutron porosity', 'thermal neutron', 'hydrogen index', 'nphi'],
+            # Expanded neutron keywords for better description-based matching
+            CurveType.NEUT: ['neutron porosity', 'thermal neutron', 'hydrogen index', 'nphi',
+                            'compensated neutron', 'neutron log', 'cnl', 'sidewall neutron',
+                            'epithermal neutron', 'tnph', 'npor', 'neutron curve'],
             CurveType.SONIC: ['sonic', 'acoustic', 'compressional slowness', 'transit time'],
-            CurveType.CALIPER: ['caliper', 'borehole size', 'hole diameter', 'bit size'],
-            CurveType.SP: ['spontaneous potential', 'self potential'],
+            CurveType.CALIPER: ['caliper', 'borehole size', 'hole diameter', 'wellbore diameter'],
+            CurveType.BS: ['bit size', 'drill bit', 'bit diameter'],
+            CurveType.SP: ['spontaneous potential', 'self potential', 'sp curve', 'sp log'],
             CurveType.PEF: ['photoelectric', 'pe factor', 'pef'],
-            CurveType.DEPTH: ['measured depth', 'true vertical', 'depth'],
+            CurveType.DEPTH: ['measured depth', 'hole depth'],
         }
-        
+
+        # Negative keywords that should REJECT a curve type match
+        # ISSUE 2 FIX: Extended negative keywords for resistivity to prevent neutron misclassification
+        negative_keyword_patterns = {
+            CurveType.DEPTH: ['true vertical', 'tvd', 'tvdss', 'subsea', 'vertical depth'],
+            CurveType.RES_DEEP: ['neutron', 'count rate', 'thermal', 'cps', 'counts/sec',
+                                 'capture', 'porosity', 'hydrogen', 'epithermal', 'sigma',
+                                 'count', 'counts', 'c/s', 'pu', 'v/v'],
+            CurveType.RES_MED: ['neutron', 'count rate', 'thermal', 'cps', 'counts/sec',
+                                'capture', 'porosity', 'hydrogen', 'epithermal', 'sigma',
+                                'count', 'counts', 'c/s', 'pu', 'v/v'],
+            CurveType.RES_SHAL: ['neutron', 'count rate', 'thermal', 'cps', 'counts/sec',
+                                 'capture', 'porosity', 'hydrogen', 'epithermal', 'sigma',
+                                 'count', 'counts', 'c/s', 'pu', 'v/v'],
+            CurveType.CALIPER: ['bit size', 'bit'],
+            CurveType.SP: ['porosity', 'saturation', 'phi'],  # Avoid SPHI misclassification
+        }
+
         matches = []
         matched_keywords = []
-        
+        rejected = []
+
         for curve_type, keywords in keyword_patterns.items():
+            # First check if any negative keywords are present
+            neg_keywords = negative_keyword_patterns.get(curve_type, [])
+            is_rejected = False
+            for neg_kw in neg_keywords:
+                if neg_kw in combined_text:
+                    is_rejected = True
+                    rejected.append(f"{curve_type.value}(rejected:{neg_kw})")
+                    break
+
+            if is_rejected:
+                continue
+
+            # Check positive keywords
             for keyword in keywords:
                 if keyword in combined_text:
                     if curve_type not in matches:
                         matches.append(curve_type)
                         matched_keywords.append(keyword)
                     break
-        
+
+        reasoning = f"Keywords found: {matched_keywords[:3]}" if matches else "No keyword match"
+        if rejected:
+            reasoning += f"; Rejected: {rejected[:2]}"
+
         return LayerResult(
             layer_name="Description/Keyword",
             layer_number=1,
             confidence_contribution=SCORE_WEIGHTS["description"] if matches else 0,
             identified_type=matches[0] if matches else None,
-            reasoning=f"Keywords found: {matched_keywords[:3]}" if matches else "No keyword match",
+            reasoning=reasoning,
             passed=len(matches) > 0
         ), matches
     
@@ -761,12 +1028,15 @@ class CurveIdentifier:
     def _layer_4_unit_scoring(self, unit: str) -> Tuple[LayerResult, List[CurveType]]:
         """
         Layer 4: Unit validation scoring (+40 pts).
-        
+
+        Applies both positive unit matching and negative unit filtering.
+        Negative units cause a curve type to be rejected (e.g., cps for resistivity).
+
         Returns:
             Tuple of (LayerResult, list of CurveTypes with matching units)
         """
         unit_cleaned = _clean_unit(unit)
-        
+
         if not unit_cleaned:
             return LayerResult(
                 layer_name="Unit Validation",
@@ -776,23 +1046,41 @@ class CurveIdentifier:
                 reasoning="No unit specified",
                 passed=False
             ), []
-        
+
         matches = []
-        
+        rejected = []
+
         for curve_type, config in UNIT_PATTERNS.items():
+            # Check negative units first (reject if match)
+            neg_units = config.get('negative_units', [])
+            is_rejected = False
+            for neg_unit in neg_units:
+                neg_cleaned = _clean_unit(neg_unit)
+                if neg_cleaned and (neg_cleaned in unit_cleaned or unit_cleaned in neg_cleaned):
+                    is_rejected = True
+                    rejected.append(f"{curve_type.value}(rejected:{neg_unit})")
+                    break
+
+            if is_rejected:
+                continue
+
+            # Check positive units
             valid_units = [_clean_unit(u) for u in config['valid_units']]
-            # Check if unit matches any valid unit
             for valid_unit in valid_units:
                 if valid_unit and (valid_unit in unit_cleaned or unit_cleaned in valid_unit):
                     matches.append(curve_type)
                     break
-        
+
+        reasoning = f"Unit '{unit}' matches: {[ct.value for ct in matches]}" if matches else f"Unit '{unit}' not recognized"
+        if rejected:
+            reasoning += f"; Rejected: {rejected[:2]}"
+
         return LayerResult(
             layer_name="Unit Validation",
             layer_number=4,
             confidence_contribution=SCORE_WEIGHTS["unit"] if matches else 0,
             identified_type=matches[0] if matches else None,
-            reasoning=f"Unit '{unit}' matches: {[ct.value for ct in matches]}" if matches else f"Unit '{unit}' not recognized",
+            reasoning=reasoning,
             passed=len(matches) > 0
         ), matches
     
@@ -1069,7 +1357,7 @@ class CurveIdentifier:
         )
     
     def _layer_6_statistical_shape(
-        self, 
+        self,
         data: np.ndarray,
         current_scores: Dict[CurveType, float]
     ) -> LayerResult:
@@ -1089,7 +1377,7 @@ class CurveIdentifier:
                 reasoning="Insufficient data for statistical analysis",
                 passed=False
             )
-        
+
         # Calculate statistical features
         stats = {
             'mean': np.mean(valid_data),
@@ -1098,34 +1386,83 @@ class CurveIdentifier:
             'kurtosis': self._calculate_kurtosis(valid_data),
             'cv': np.std(valid_data) / np.mean(valid_data) if np.mean(valid_data) != 0 else 0,
         }
-        
+
         insights = []
-        
+
         # GR: Often right-skewed (shale spikes), high variability
         if current_scores.get(CurveType.GR, 0) > 0:
             if stats['skewness'] > 0 and stats['cv'] > 0.3:
                 current_scores[CurveType.GR] *= 1.2
                 insights.append("GR-like: positive skew, high variability")
-        
+
         # Density: Usually tight distribution around 2.4-2.65 g/cc
         if current_scores.get(CurveType.DENS, 0) > 0:
             if stats['cv'] < 0.15 and 2.0 < stats['mean'] < 2.8:
                 current_scores[CurveType.DENS] *= 1.2
                 insights.append("DENS-like: tight distribution")
-        
+
         # Resistivity: Often log-normal (high variability, right-skewed)
         for res_type in [CurveType.RES_DEEP, CurveType.RES_MED, CurveType.RES_SHAL]:
             if current_scores.get(res_type, 0) > 0:
                 if stats['skewness'] > 1 and stats['cv'] > 0.5:
                     current_scores[res_type] *= 1.15
                     insights.append(f"{res_type.value}-like: log-normal pattern")
-        
+
         # Neutron: Moderate variability, can be negative (gas effect)
         if current_scores.get(CurveType.NEUT, 0) > 0:
             if np.min(valid_data) < 0:
                 current_scores[CurveType.NEUT] *= 1.3
                 insights.append("NEUT-like: has negative values (gas effect)")
-        
+
+        # ==================================================================
+        # BS vs CALIPER discrimination based on variance AND standard bit sizes
+        # ISSUE 1 FIX: Bit Size is constant/near-constant AND matches known sizes
+        # Caliper has borehole variation and should NOT match standard bit sizes
+        # ==================================================================
+        is_constant, cv_value = _is_constant_or_near_constant(data, threshold=0.02)
+        is_bit_size, matched_bit_size = _matches_standard_bit_size(data, tolerance=0.25)
+
+        # If both BS and CALIPER have scores, discriminate based on variance + bit size
+        bs_score = current_scores.get(CurveType.BS, 0)
+        cali_score = current_scores.get(CurveType.CALIPER, 0)
+
+        if bs_score > 0 or cali_score > 0:
+            # Check for bit size characteristics: constant AND matches standard size
+            if is_constant and is_bit_size:
+                # Strong indicator of Bit Size: constant + matches standard bit size
+                if bs_score > 0:
+                    current_scores[CurveType.BS] *= 3.0  # Very strong boost
+                    insights.append(f"BS-like: constant (CV={cv_value:.3f}), matches {matched_bit_size}\"")
+                if cali_score > 0:
+                    current_scores[CurveType.CALIPER] *= 0.1  # Very strong penalty
+                    insights.append(f"CALI rejected: constant value matches bit size {matched_bit_size}\"")
+            elif is_constant:
+                # Constant but doesn't match standard size - still likely BS
+                if bs_score > 0:
+                    current_scores[CurveType.BS] *= 2.0  # Strong boost
+                    insights.append(f"BS-like: constant value (CV={cv_value:.3f})")
+                if cali_score > 0:
+                    current_scores[CurveType.CALIPER] *= 0.3  # Strong penalty
+            else:
+                # Has variation -> likely Caliper (not BS)
+                if cali_score > 0:
+                    current_scores[CurveType.CALIPER] *= 1.5  # Boost
+                    insights.append(f"CALI-like: borehole variation (CV={cv_value:.3f})")
+                if bs_score > 0:
+                    current_scores[CurveType.BS] *= 0.3  # Penalty - BS should be constant
+
+        # ==================================================================
+        # Depth validation - check for monotonic increase
+        # ==================================================================
+        if current_scores.get(CurveType.DEPTH, 0) > 0:
+            is_valid_md, md_reason = _is_valid_measured_depth(data)
+            if is_valid_md:
+                current_scores[CurveType.DEPTH] *= 1.5
+                insights.append(f"DEPTH-like: {md_reason}")
+            else:
+                current_scores[CurveType.DEPTH] *= 0.3
+                insights.append(f"DEPTH rejected: {md_reason}")
+
         return LayerResult(
             layer_name="Statistical Shape",
             layer_number=6,
@@ -1260,17 +1597,23 @@ class CurveIdentifier:
         return insights
     
     def _layer_9_duplicate_resolution(
-        self, 
+        self,
         curve_results: Dict[str, CurveIdentificationResult],
-        candidates_by_type: Dict[CurveType, List[Tuple[str, float]]]
+        candidates_by_type: Dict[CurveType, List[Tuple[str, float]]],
+        las=None
     ) -> Tuple[Dict[str, CurveIdentificationResult], List[str]]:
         """
         Layer 9: Choose best curve when duplicates exist.
-        
+
         For resistivity curves, applies DOI-aware classification first:
         - Extracts 2-3 digit DOI suffixes from mnemonics
         - Highest DOI = RES_DEEP, lowest = RES_SHAL
         - Falls back to confidence-based selection if no valid DOI found
+
+        For neutron curves (ISSUE 3 FIX):
+        - Prefers thermal neutron curves
+        - Prefers limestone matrix curves
+        - Falls back to confidence-based selection
         """
         duplicate_warnings = []
         
@@ -1324,6 +1667,49 @@ class CurveIdentifier:
                 )
         
         # =================================================================
+        # NEUTRON PREFERENCE (ISSUE 3 FIX)
+        # When multiple neutron curves exist, prefer thermal neutron / limestone matrix
+        # =================================================================
+        if CurveType.NEUT in candidates_by_type and len(candidates_by_type[CurveType.NEUT]) > 1:
+            neut_candidates = candidates_by_type[CurveType.NEUT]
+
+            # Score each candidate with neutron preference
+            scored_neutrons = []
+            for mnemonic, confidence in neut_candidates:
+                # Get description directly from LAS curves if available
+                description = ""
+                if las is not None:
+                    try:
+                        for curve in las.curves:
+                            if curve.mnemonic == mnemonic:
+                                description = curve.descr or ""
+                                break
+                    except:
+                        pass
+
+                # Get preference score from mnemonic and description
+                pref_score = get_neutron_preference_score(mnemonic, description)
+
+                # Combined score: preference weighted more than confidence
+                combined_score = confidence + (pref_score * 0.3)
+                scored_neutrons.append((mnemonic, confidence, pref_score, combined_score, description))
+
+            # Sort by combined score (descending)
+            scored_neutrons.sort(key=lambda x: -x[3])
+
+            # Rebuild the candidates list with preference-adjusted order
+            candidates_by_type[CurveType.NEUT] = [(m, conf) for m, conf, _, _, _ in scored_neutrons]
+
+            # Add preference note with description info
+            best = scored_neutrons[0]
+            if best[2] > 0:
+                desc_info = f" - '{best[4][:40]}...'" if best[4] and len(best[4]) > 40 else (f" - '{best[4]}'" if best[4] else "")
+                duplicate_warnings.append(
+                    f"Neutron preference applied: {best[0]} selected{desc_info} "
+                    f"(preference score: {best[2]:.1f}, thermal/limestone preferred)"
+                )
+
+        # =================================================================
         # STANDARD DUPLICATE RESOLUTION (for all curve types)
         # =================================================================
         for curve_type, candidates in candidates_by_type.items():
@@ -1331,19 +1717,19 @@ class CurveIdentifier:
                 # Sort by confidence
                 sorted_candidates = sorted(candidates, key=lambda x: -x[1])
                 primary = sorted_candidates[0][0]
-                
+
                 warning = f"Multiple {curve_type.value} candidates: "
                 warning += ", ".join([f"{c[0]} ({c[1]:.2f})" for c in sorted_candidates])
                 warning += f". Selected: {primary}"
                 duplicate_warnings.append(warning)
-                
+
                 # Mark non-primary as duplicates
                 for mnemonic, _ in sorted_candidates[1:]:
                     if mnemonic in curve_results:
                         curve_results[mnemonic].is_duplicate = True
                         curve_results[mnemonic].duplicate_of = primary
                         curve_results[mnemonic].selected_as_primary = False
-        
+
         return curve_results, duplicate_warnings
     
     def _generate_explanation(

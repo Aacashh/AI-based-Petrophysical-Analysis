@@ -8,3 +8,7 @@ font="sans serif"
 
 [server]
 maxUploadSize = 200
+fileWatcherType = "poll"
+
+[runner]
+fastReruns = false

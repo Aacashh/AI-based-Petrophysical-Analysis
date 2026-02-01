@@ -70,20 +70,28 @@ def apply_smoothing(df, window=5, columns=None, exclude=['DEPTH']):
 def normalize_porosity_units(df, las, mapping):
     """
     Normalize neutron porosity values from percentage or PU units to v/v (decimal).
-    NPHI in % or PU (0-60) should be converted to v/v (0.00-0.60).
-    
+
+    ISSUE 3 FIX: Unit Normalization Rules (from client feedback):
+    - PU or % → divide by 100 → V/V
+    - ft3/ft3 → V/V (no change, already volumetric fraction)
+    - m3/m3 → V/V (no change, already volumetric fraction)
+    - v/v → no change (already in correct format)
+
+    This normalization is applied BEFORE curve selection/scoring to ensure
+    consistent neutron responses across vendors and tools.
+
     Args:
         df: pandas DataFrame with curve data
         las: lasio.LASFile object to check units
         mapping: Curve mapping dictionary
-        
+
     Returns:
         DataFrame with normalized NPHI values
     """
     neut_col = mapping.get('NEUT')
     if not neut_col or neut_col not in df.columns:
         return df
-    
+
     # Get the unit of the neutron curve from the LAS file
     neut_unit = None
     try:
@@ -93,45 +101,116 @@ def normalize_porosity_units(df, las, mapping):
                 break
     except:
         pass
-    
+
+    # Units that require division by 100 (percentage-based)
+    percentage_units = [
+        '%', 'PU', 'PERCENT', 'PCT', 'P.U.', 'P.U',
+        'PERC', 'POROSITY UNITS', 'POR UNITS',
+        'V/V%', 'VOL%', 'PORCENT'
+    ]
+
+    # Units that are already in v/v (no conversion needed)
+    volumetric_units = [
+        'V/V', 'FRAC', 'DEC', 'DECIMAL', 'FRACTION',
+        'FT3/FT3', 'M3/M3', 'CC/CC'
+    ]
+
     if not neut_unit:
-        # Try to detect from data range
+        # Try to detect from data range if unit not specified
         data = df[neut_col].dropna()
         if len(data) > 10:
-            data_max = data.quantile(0.95)
-            # If max value > 1, it's likely in percentage
-            if data_max > 1:
-                neut_unit = '%'
-    
+            # Use percentiles for robust range detection
+            data_p05 = data.quantile(0.05)
+            data_p95 = data.quantile(0.95)
+
+            # If data range suggests percentage (values typically 0-60 for neutron)
+            # v/v values are typically -0.15 to 0.60
+            if data_p95 > 1.0 and data_p05 > -1.0:
+                # Likely percentage units (values > 1.0 suggest not decimal)
+                neut_unit = 'PU'
+            elif -0.2 < data_p05 and data_p95 < 1.0:
+                # Already in v/v, no conversion needed
+                neut_unit = 'V/V'
+
+    # Normalize unit string for comparison
+    neut_unit_clean = neut_unit.upper().replace(' ', '').replace('.', '') if neut_unit else ''
+
     # Convert if unit is % or PU (percentage units)
-    if neut_unit in ['%', 'PU', 'PERCENT', 'PCT', 'P.U.', 'P.U']:
+    if neut_unit_clean in [u.upper().replace(' ', '').replace('.', '') for u in percentage_units]:
         df = df.copy()
-        # Convert from percentage to decimal v/v
+        # Convert from percentage to decimal v/v (divide by 100)
+        # Standard scaling: PU / 100 = v/v
         df[neut_col] = df[neut_col] / 100.0
-    
+
+    # ft3/ft3, m3/m3 are already volumetric fractions - no conversion needed
+    # v/v, frac, dec are already in correct format - no conversion needed
+
     return df
 
 
 def process_data(las, mapping, smooth_window=0):
     """
     Convert LAS data to clean DataFrame with proper null handling.
-    
+
     Args:
         las: lasio.LASFile object
         mapping: Curve mapping dictionary
         smooth_window: Smoothing window (0 = no smoothing)
-        
+
     Returns:
         pandas DataFrame
     """
     df = las.df()
+    index_name = df.index.name or 'DEPT'
+
+    # Identify depth-related column names that would conflict after standardization
+    depth_aliases = {'DEPT', 'DEPTH', 'MD', 'DEPTM', 'DEPTHM'}
+    if mapping.get('DEPTH'):
+        depth_aliases.add(mapping['DEPTH'].upper())
+
+    # Find data columns that are depth duplicates (will conflict with index after reset)
+    cols_to_drop = []
+    for col in df.columns:
+        col_upper = col.upper()
+        # Drop if it matches the index name or is a depth alias
+        if col == index_name or col_upper in depth_aliases:
+            cols_to_drop.append(col)
+
+    if cols_to_drop:
+        df = df.drop(columns=cols_to_drop)
+
     df = df.reset_index()
-    
-    # Standardize depth column name
-    if mapping['DEPTH'] and mapping['DEPTH'] in df.columns:
-        df.rename(columns={mapping['DEPTH']: 'DEPTH'}, inplace=True)
-    elif df.columns[0].upper() in ['DEPT', 'DEPTH', 'MD']:
-        df.rename(columns={df.columns[0]: 'DEPTH'}, inplace=True)
+
+    # Handle any remaining duplicate column names by adding suffix
+    if df.columns.duplicated().any():
+        cols = pd.Series(df.columns)
+        for dup in cols[cols.duplicated()].unique():
+            dup_indices = cols[cols == dup].index.tolist()
+            for i, idx in enumerate(dup_indices[1:], 1):
+                cols.iloc[idx] = f"{dup}_{i}"
+        df.columns = cols
+
+    # Standardize depth column name to 'DEPTH'
+    first_col = df.columns[0]
+    if first_col != 'DEPTH':
+        df.rename(columns={first_col: 'DEPTH'}, inplace=True)
+
+    # Final safety check: ensure no duplicate DEPTH columns
+    depth_cols = [c for c in df.columns if c == 'DEPTH']
+    if len(depth_cols) > 1:
+        # Keep only the first DEPTH column, rename others
+        seen_depth = False
+        new_cols = []
+        for col in df.columns:
+            if col == 'DEPTH':
+                if not seen_depth:
+                    new_cols.append('DEPTH')
+                    seen_depth = True
+                else:
+                    new_cols.append('DEPTH_DUP')
+            else:
+                new_cols.append(col)
+        df.columns = new_cols
     
     # Handle null values
     df = handle_null_values(df)
